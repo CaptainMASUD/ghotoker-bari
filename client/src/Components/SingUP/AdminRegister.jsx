@@ -29,7 +29,7 @@ const AdminLogin = () => {
     setSuccessMessage(null);
 
     try {
-      const response = await axios.post("http://localhost:4000/api/admin/login", formData);
+      const response = await axios.post("ghotoker-bari-api.vercel.app/api/admin/login", formData);
       setSuccessMessage(response.data.message);
       localStorage.setItem("adminToken", response.data.token); // Store token in localStorage
       setIsLoading(false);

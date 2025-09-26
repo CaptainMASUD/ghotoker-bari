@@ -277,7 +277,7 @@ const RegistrationForm = () => {
       });
       profilePhotos.forEach((p) => fd.append("profile_photos", p.file));
 
-      const res = await fetch("http://localhost:4000/api/user/register", {
+      const res = await fetch("ghotoker-bari-api.vercel.app/api/user/register", {
         method: "POST",
         body: fd,
       });

@@ -32,7 +32,7 @@ export default function LoginPage() {
     e.preventDefault();
     dispatch(signInStart());
     try {
-      const res = await axios.post("http://localhost:4000/api/user/login", {
+      const res = await axios.post("ghotoker-bari-api.vercel.app/api/user/login", {
         email_address: email,
         password,
       });
