@@ -3,7 +3,10 @@ import cors from "cors";
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin:  "https://ghotoker-bari-api.vercel.app" || "http://localhost:5173",
+  credentials: true,
+}));
 app.use(express.json());
 
 // Import routes
