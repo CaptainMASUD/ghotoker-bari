@@ -4,9 +4,9 @@ import { Mail, Lock, ShieldCheck, Eye, EyeOff, CheckCircle2, AlertTriangle } fro
 
 /**
  * AdminLogin.jsx (Updated)
- * - Posts to ghotoker-bari-api.vercel.app/api/admin/login
+ * - Posts to https://ghotoker-bari-api.vercel.app/api/admin/login
  * - On success, saves JWT to localStorage as 'token'
- * - Verifies session via GET ghotoker-bari-api.vercel.app/api/admin/me
+ * - Verifies session via GET https://ghotoker-bari-api.vercel.app/api/admin/me
  * - Redirects to `redirectTo` (default: /admin) when verified
  * - TailwindCSS + Framer Motion + Lucide icons
  */
@@ -32,7 +32,7 @@ export default function AdminLogin({ onSuccess, redirectTo = "/admin" }) {
     setIsLoading(true);
     try {
       // 1) Login
-      const res = await fetch("ghotoker-bari-api.vercel.app/api/admin/login", {
+      const res = await fetch("https://ghotoker-bari-api.vercel.app/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -50,7 +50,7 @@ export default function AdminLogin({ onSuccess, redirectTo = "/admin" }) {
 
       // 3) Verify admin session (/me)
       try {
-        const meRes = await fetch("ghotoker-bari-api.vercel.app/api/admin/me", {
+        const meRes = await fetch("https://ghotoker-bari-api.vercel.app/api/admin/me", {
           headers: { Authorization: `Bearer ${data.token}` },
         });
         if (!meRes.ok) throw new Error("Auth check failed");
@@ -120,8 +120,8 @@ export default function AdminLogin({ onSuccess, redirectTo = "/admin" }) {
           </div>
 
           <div className="mt-10 text-white/50 text-xs">
-            <p>Server: ghotoker-bari-api.vercel.app/api/admin/login</p>
-            <p>Self-check: GET ghotoker-bari-api.vercel.app/api/admin/me</p>
+            <p>Server: https://ghotoker-bari-api.vercel.app/api/admin/login</p>
+            <p>Self-check: GET https://ghotoker-bari-api.vercel.app/api/admin/me</p>
             <p>Storage key: <span className="font-mono">token</span></p>
           </div>
         </motion.div>

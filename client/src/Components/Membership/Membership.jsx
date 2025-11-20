@@ -18,7 +18,7 @@ const MembershipManagement = () => {
   // Fetch memberships
   useEffect(() => {
     axios
-      .get("http://localhost:4000/api/memberships")
+      .get("https://ghotoker-bari-api.vercel.app/api/memberships")
       .then((response) => {
         setMemberships(response.data);
       })
@@ -46,7 +46,7 @@ const MembershipManagement = () => {
       features: formData.features.split(","),
     };
     axios
-      .post("http://localhost:4000/api/memberships", membershipData, {
+      .post("https://ghotoker-bari-api.vercel.app/api/memberships", membershipData, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("adminToken")}`,
         },
@@ -65,7 +65,7 @@ const MembershipManagement = () => {
     e.preventDefault();
     axios
       .post(
-        "http://localhost:4000/api/memberships/assign",
+        "https://ghotoker-bari-api.vercel.app/api/memberships/assign",
         { userId: selectedUser, membershipId: selectedMembership },
         {
           headers: {

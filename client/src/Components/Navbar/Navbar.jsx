@@ -5,6 +5,7 @@ import { FaUserCircle } from "react-icons/fa";
 import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../../Redux/UserSlice/UserSlice";
 import { motion, AnimatePresence } from "framer-motion";
+import logo from "../../Logo/logo.svg";
 
 /* ---------- DESKTOP link styles (with footer-style hover underline) ---------- */
 const linkBase =
@@ -17,10 +18,8 @@ const linkActiveDesktop =
   "text-rose-300 font-semibold after:absolute after:left-3 after:right-3 after:-bottom-0.5 after:h-[2px] after:rounded-full after:bg-gradient-to-r after:from-fuchsia-300 after:via-pink-300 after:to-rose-300";
 
 /* ---------- MOBILE link styles (no underline animation) ---------- */
-const linkInactiveMobile =
-  "text-white/90 hover:bg-white/5 hover:text-rose-200";
-const linkActiveMobile =
-  "bg-white/10 text-rose-300";
+const linkInactiveMobile = "text-white/90 hover:bg-white/5 hover:text-rose-200";
+const linkActiveMobile = "bg-white/10 text-rose-300";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -61,13 +60,25 @@ const Navbar = () => {
       animate={{ backgroundColor: scrolled ? "#141414cc" : "transparent" }}
       transition={{ duration: 0.5 }}
     >
-      <div className="max-w-7xl mx-auto px-4 lg:px-12 flex justify-between items-center h-16">
-        {/* Logo with brand gradient */}
+      <div className="max-w-7xl mx-auto px-4 lg:px-12 flex justify-between items-center h-14 lg:h-[60px]">
+        {/* Logo + Bangla brand text */}
         <NavLink
           to="/"
-          className="text-3xl font-semibold bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 bg-clip-text text-transparent"
+          className="flex items-center gap-3 group"
+          aria-label="Go to home"
         >
-          GhotokerBari
+          <img
+            src={logo}
+            alt="GhotokerBari logo"
+            className="h-10 sm:h-11 lg:h-12 w-auto select-none pointer-events-none transition-transform duration-300 group-hover:scale-105"
+            loading="eager"
+            decoding="async"
+          />
+          {/* Bangla brand text: 'ঘটকদের' (reddish) + 'বাড়ি' (white) */}
+          <span style={{fontFamily: "Atma"}} className="flex items-baseline leading-none font-extrabold tracking-tight drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
+            <span className="text-rose-400 text-xl sm:text-2xl">ঘটকদের</span>
+            <span className="text-white text-xl sm:text-2xl ml-1">বাড়ি</span>
+          </span>
         </NavLink>
 
         {/* Desktop Links */}

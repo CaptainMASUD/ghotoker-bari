@@ -22,7 +22,7 @@ const getToken = () => (typeof window !== "undefined" ? localStorage.getItem("to
 
 // Fetch self admin profile
 async function fetchAdminMe(token) {
-  const res = await fetch("http://localhost:4000/api/admin/me", {
+  const res = await fetch("https://ghotoker-bari-api.vercel.app/api/admin/me", {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error("unauthorized");

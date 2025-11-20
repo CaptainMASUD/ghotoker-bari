@@ -36,7 +36,7 @@ export default function Approvals() {
     try {
       setLoading(true);
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch("http://localhost:4000/api/admin/users", {
+      const response = await fetch("https://ghotoker-bari-api.vercel.app/api/admin/users", {
         headers: {
           "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` }),
@@ -78,7 +78,7 @@ export default function Approvals() {
   const handleApprove = async (id) => {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`http://localhost:4000/api/admin/verify/${id}`, {
+      const response = await fetch(`https://ghotoker-bari-api.vercel.app/api/admin/verify/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

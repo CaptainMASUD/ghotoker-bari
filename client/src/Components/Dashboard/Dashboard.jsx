@@ -38,11 +38,11 @@ export default function Dashboard() {
           ...(token && { Authorization: `Bearer ${token}` }),
         };
 
-        const usersResponse = await fetch("http://localhost:4000/api/admin/users", { headers });
+        const usersResponse = await fetch("https://ghotoker-bari-api.vercel.app/api/admin/users", { headers });
         const usersData = await usersResponse.json();
         const users = Array.isArray(usersData) ? usersData : [];
 
-        const membershipsResponse = await fetch("http://localhost:4000/api/memberships", { headers });
+        const membershipsResponse = await fetch("https://ghotoker-bari-api.vercel.app/api/memberships", { headers });
         const membershipsData = await membershipsResponse.json();
         const memberships = Array.isArray(membershipsData) ? membershipsData : [];
 

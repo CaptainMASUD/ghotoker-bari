@@ -45,7 +45,7 @@ export default function Users() {
       try {
         setLoading(true);
         const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const response = await fetch("http://localhost:4000/api/admin/users", {
+        const response = await fetch("https://ghotoker-bari-api.vercel.app/api/admin/users", {
           headers: {
             "Content-Type": "application/json",
             ...(token && { Authorization: `Bearer ${token}` }),
@@ -94,7 +94,7 @@ export default function Users() {
   const handleVerifyUser = async (userId) => {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`http://localhost:4000/api/admin/verify/${userId}`, {
+      const response = await fetch(`https://ghotoker-bari-api.vercel.app/api/admin/verify/${userId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -115,7 +115,7 @@ export default function Users() {
   const handleDeleteUser = async () => {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`http://localhost:4000/api/admin/users/${selectedUser._id}`, {
+      const response = await fetch(`https://ghotoker-bari-api.vercel.app/api/admin/users/${selectedUser._id}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -138,7 +138,7 @@ export default function Users() {
   const handleEditUser = async () => {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`http://localhost:4000/api/admin/users/${selectedUser._id}`, {
+      const response = await fetch(`https://ghotoker-bari-api.vercel.app/api/admin/users/${selectedUser._id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
