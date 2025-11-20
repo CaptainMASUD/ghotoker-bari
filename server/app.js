@@ -14,7 +14,7 @@ const app = express();
 
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://ghotoker-bari-api.vercel.app",
+  "https://ghotoker-bari.vercel.app",
 ];
 
 app.use(
