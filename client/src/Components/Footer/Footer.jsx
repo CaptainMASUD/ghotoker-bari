@@ -1,169 +1,206 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { FaFacebookF, FaTwitter, FaInstagram, FaLinkedinIn } from "react-icons/fa";
+import {
+  FaFacebookF,
+  FaTwitter,
+  FaInstagram,
+  FaLinkedinIn,
+  FaEnvelope,
+} from "react-icons/fa";
+import logo from "../../Logo/logo.svg";
 
 export default function Footer() {
+  const quickLinks = [
+    { label: "Home", to: "/" },
+    { label: "Find Matches", to: "/find-matches" },
+    { label: "Success Stories", to: "/success-stories" },
+    { label: "Contact", to: "/contact" },
+  ];
+
+  const resourceLinks = [
+    { label: "Privacy Policy", to: "/privacy-policy" },
+    { label: "Terms & Conditions", to: "/terms-conditions" },
+    { label: "FAQ", to: "/contact" },
+    { label: "Support", to: "/contact" },
+  ];
+
+  const socialLinks = [
+    { Icon: FaFacebookF, label: "Facebook", href: "#" },
+    { Icon: FaTwitter, label: "Twitter / X", href: "#" },
+    { Icon: FaInstagram, label: "Instagram", href: "#" },
+    { Icon: FaLinkedinIn, label: "LinkedIn", href: "#" },
+  ];
+
   return (
-    <footer className="relative w-full bg-[#0b0a12] text-white">
-      {/* Ambient background glow */}
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-20 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full blur-3xl opacity-20 bg-fuchsia-500/25" />
-        <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full blur-3xl opacity-15 bg-rose-500/20" />
-      </div>
-
-      {/* Frame with gradient ring (top-rounded only) – edge-to-edge */}
-      <div className="w-full">
-        <div className="rounded-t-3xl p-[1px] bg-gradient-to-r from-fuchsia-300/35 via-pink-300/35 to-rose-300/35">
-          <div className="rounded-t-3xl border border-white/10 bg-[#0e0d15]/95 backdrop-blur-xl">
-            {/* Content */}
-            <div className="mx-auto max-w-7xl px-6 py-12">
-              <div className="grid gap-10 md:grid-cols-4">
-                {/* Branding */}
-                <div className="space-y-4">
-                  <h2 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 bg-clip-text text-transparent">
-                    GhotokerBari
-                  </h2>
-                  <p className="text-white/75 leading-relaxed">
-                    Connecting hearts safely. Join our trusted community of verified singles and families.
-                  </p>
-
-                  {/* Socials */}
-                  <div className="flex gap-3 pt-1">
-                    {[
-                      { Icon: FaFacebookF, label: "Facebook", href: "#" },
-                      { Icon: FaTwitter, label: "Twitter / X", href: "#" },
-                      { Icon: FaInstagram, label: "Instagram", href: "#" },
-                      { Icon: FaLinkedinIn, label: "LinkedIn", href: "#" },
-                    ].map(({ Icon, label, href }) => (
-                      <a
-                        key={label}
-                        href={href}
-                        aria-label={label}
-                        className="group rounded-xl p-[1px] bg-gradient-to-r from-fuchsia-300/50 via-pink-300/50 to-rose-300/50"
-                      >
-                        <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#0e0d15]/90 border border-white/10 hover:bg-white/5 transition">
-                          <Icon size={16} className="text-white/90 group-hover:text-white" />
-                        </span>
-                      </a>
-                    ))}
-                  </div>
+    <footer className="w-full bg-[#242424] text-white">
+      <div className="border-t border-white/10 bg-[#242424]">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-4">
+              <Link
+                to="/"
+                className="inline-flex items-center gap-3"
+                aria-label="ঘটকদের বাড়ি home"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-white/10">
+                  <img
+                    src={logo}
+                    alt="ঘটকদের বাড়ি"
+                    className="h-9 w-9 object-contain"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
 
-                {/* Quick Links */}
-                <nav className="space-y-4">
-                  <h3 className="text-lg font-semibold text-white">Quick Links</h3>
-                  <ul className="space-y-2 text-sm font-medium">
-                    {[
-                      { label: "Home", to: "/" },
-                      { label: "Find Matches", to: "/find-matches" },
-                      { label: "Success Stories", to: "/success-stories" },
-                      { label: "Contact", to: "/contact" },
-                    ].map((l) => (
-                      <li key={l.label}>
-                        <Link
-                          to={l.to}
-                          className="relative inline-block py-1 text-white/85 hover:text-rose-200 transition group"
-                        >
-                          {l.label}
-                          <span className="absolute left-0 right-0 -bottom-0.5 h-[2px] scale-x-0 transform bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 rounded-full transition-transform duration-200 ease-out group-hover:scale-x-100" />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </nav>
-
-                {/* Resources (includes your new routes) */}
-                <nav className="space-y-4">
-                  <h3 className="text-lg font-semibold text-white">Resources</h3>
-                  <ul className="space-y-2 text-sm font-medium">
-                    <li>
-                      <Link
-                        to="/privacy-policy"
-                        className="relative inline-block py-1 text-white/85 hover:text-rose-200 transition group"
-                      >
-                        Privacy Policy
-                        <span className="absolute left-0 right-0 -bottom-0.5 h-[2px] scale-x-0 transform bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 rounded-full transition-transform duration-200 ease-out group-hover:scale-x-100" />
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="/terms-conditions"
-                        className="relative inline-block py-1 text-white/85 hover:text-rose-200 transition group"
-                      >
-                        Terms & Conditions
-                        <span className="absolute left-0 right-0 -bottom-0.5 h-[2px] scale-x-0 transform bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 rounded-full transition-transform duration-200 ease-out group-hover:scale-x-100" />
-                      </Link>
-                    </li>
-                    <li>
-                      <a href="#" className="relative inline-block py-1 text-white/85 hover:text-rose-200 transition group">
-                        FAQ
-                        <span className="absolute left-0 right-0 -bottom-0.5 h-[2px] scale-x-0 transform bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 rounded-full transition-transform duration-200 ease-out group-hover:scale-x-100" />
-                      </a>
-                    </li>
-                    <li>
-                      <a href="#" className="relative inline-block py-1 text-white/85 hover:text-rose-200 transition group">
-                        Support
-                        <span className="absolute left-0 right-0 -bottom-0.5 h-[2px] scale-x-0 transform bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 rounded-full transition-transform duration-200 ease-out group-hover:scale-x-100" />
-                      </a>
-                    </li>
-                  </ul>
-                </nav>
-
-                {/* Newsletter */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-white">Newsletter</h3>
-                  <p className="text-white/75">
-                    Get the latest updates, feature drops, and success stories.
-                  </p>
-                  <form
-                    className="space-y-3"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      // handle subscribe…
-                    }}
+                <div className="leading-none">
+                  <h2
+                    style={{ fontFamily: "Atma" }}
+                    className="text-2xl font-extrabold tracking-tight md:text-3xl"
                   >
-                    <label className="block">
-                      <span className="sr-only">Email address</span>
-                      <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur px-3 focus-within:ring-2 focus-within:ring-rose-300/60">
-                        <input
-                          type="email"
-                          required
-                          placeholder="Enter your email"
-                          className="h-12 w-full bg-transparent px-1 text-white placeholder-white/50 outline-none"
-                        />
-                      </div>
-                    </label>
-                    <button
-                      type="submit"
-                      className="h-12 w-full cursor-pointer rounded-xl px-4 font-semibold text-neutral-900
-                                 bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300
-                                 shadow-lg shadow-rose-900/20 hover:shadow-xl transition"
-                    >
-                      Subscribe
-                    </button>
-                    <p className="text-xs text-white/60 leading-relaxed">
-                      By subscribing you agree to our{" "}
-                      <Link to="/terms-conditions" className="underline hover:text-rose-200">
-                        Terms
-                      </Link>{" "}
-                      and{" "}
-                      <Link to="/privacy-policy" className="underline hover:text-rose-200">
-                        Privacy Policy
-                      </Link>
-                      .
-                    </p>
-                  </form>
+                    <span className="text-rose-500">ঘটকদের</span>
+                    <span className="ml-1 text-white">বাড়ি</span>
+                  </h2>
+
+                  <p className="mt-1 text-[11px] font-medium text-white/45">
+                    Trusted matrimony platform
+                  </p>
                 </div>
+              </Link>
+
+              <p className="max-w-sm text-sm leading-6 text-white/65">
+                Connecting hearts safely through verified profiles, trusted
+                matchmaking, and family-friendly communication.
+              </p>
+
+              <div className="flex gap-3 pt-1">
+                {socialLinks.map(({ Icon, label, href }) => (
+                  <a
+                    key={label}
+                    href={href}
+                    aria-label={label}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/75 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-400"
+                  >
+                    <Icon size={15} />
+                  </a>
+                ))}
               </div>
             </div>
 
-            {/* Bottom bar (no extra bottom spacing, no bottom rounding) */}
-            <div className="border-t border-white/10 text-center text-sm text-white/60 py-4">
-              © {new Date().getFullYear()} GhotokerBari. All rights reserved.
+            <FooterNav title="Quick Links" links={quickLinks} />
+
+            <FooterNav title="Resources" links={resourceLinks} />
+
+            <div className="space-y-4">
+              <h3 className="text-base font-bold text-white">Newsletter</h3>
+
+              <p className="text-sm leading-6 text-white/65">
+                Get the latest updates, feature releases, and success stories.
+              </p>
+
+              <form
+                className="space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                }}
+              >
+                <label className="block">
+                  <span className="sr-only">Email address</span>
+
+                  <div className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 transition focus-within:border-rose-500/50 focus-within:ring-4 focus-within:ring-rose-500/10">
+                    <FaEnvelope className="shrink-0 text-sm text-rose-400" />
+
+                    <input
+                      type="email"
+                      required
+                      placeholder="Enter your email"
+                      className="h-full w-full bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+                    />
+                  </div>
+                </label>
+
+                <button
+                  type="submit"
+                  className="h-12 w-full rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-700 hover:shadow-md"
+                >
+                  Subscribe
+                </button>
+
+                <p className="text-xs leading-5 text-white/45">
+                  By subscribing you agree to our{" "}
+                  <Link
+                    to="/terms-conditions"
+                    className="font-medium text-white/65 underline-offset-4 hover:text-rose-400 hover:underline"
+                  >
+                    Terms
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    to="/privacy-policy"
+                    className="font-medium text-white/65 underline-offset-4 hover:text-rose-400 hover:underline"
+                  >
+                    Privacy Policy
+                  </Link>
+                  .
+                </p>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 bg-[#202020]">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-center text-sm text-white/50 sm:px-6 md:flex-row md:text-left lg:px-8">
+            <p>
+              © {new Date().getFullYear()}{" "}
+              <span style={{ fontFamily: "Atma" }}>
+                <span className="text-rose-400">ঘটকদের</span>
+                <span className="ml-1 text-white/70">বাড়ি</span>
+              </span>
+              . All rights reserved.
+            </p>
+
+            <div className="flex items-center gap-4">
+              <Link
+                to="/privacy-policy"
+                className="transition hover:text-rose-400"
+              >
+                Privacy
+              </Link>
+
+              <Link
+                to="/terms-conditions"
+                className="transition hover:text-rose-400"
+              >
+                Terms
+              </Link>
+
+              <Link to="/contact" className="transition hover:text-rose-400">
+                Support
+              </Link>
             </div>
           </div>
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterNav({ title, links }) {
+  return (
+    <nav className="space-y-4">
+      <h3 className="text-base font-bold text-white">{title}</h3>
+
+      <ul className="space-y-2.5 text-sm font-medium">
+        {links.map((link) => (
+          <li key={link.label}>
+            <Link
+              to={link.to}
+              className="inline-flex text-white/65 transition hover:translate-x-1 hover:text-rose-400"
+            >
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

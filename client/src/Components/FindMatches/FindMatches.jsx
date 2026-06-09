@@ -9,7 +9,7 @@ import {
 import { motion } from "framer-motion";
 
 /* ------------------------ Config ------------------------ */
-const API = "https://ghotoker-bari-api.vercel.app";
+const API = "http://localhost:4000";
 
 /* ------------------------ UI helpers ------------------------ */
 const fadeUp = (delay = 0) => ({

@@ -1,57 +1,52 @@
 import express from "express";
-import Admin from "../models/admin.model.js";
+import upload from "../middlewares/multer.js";
+
 import {
-  registerAdmin,
-  loginAdmin,
-  verifyUser,
-  getAllUsers,
-  deleteUser,
-  getMe,
-  verifyAdmin,
+  createUserByAdmin,
+  getUsersForAdmin,
+  getUserByIdForAdmin,
+  updateUserByAdmin,
+  deleteUserByAdmin,
+  verifyUserProfile,
+  updateUserAccountStatus,
+
+  createAdminUser,
+  getAdminUsers,
+  updateAdminUser,
+  verifyAdminUser,
+  updateAdminStatus,
+  resetAdminPassword,
 } from "../controllers/admin.controller.js";
+
 import { authenticateAdmin } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-const requireVerifiedAdmin = async (req, res, next) => {
-  try {
-    const admin = await Admin.findById(req.adminId).select("isVerified");
-    if (!admin) return res.status(404).json({ message: "Admin not found" });
-    if (!admin.isVerified) {
-      return res.status(403).json({ message: "Admin not verified" });
-    }
-    next();
-  } catch (e) {
-    res.status(500).json({ message: "Verification check failed", error: e.message });
-  }
-};
+router.use(authenticateAdmin);
 
-const requireSuperadmin = async (req, res, next) => {
-  try {
-    const admin = await Admin.findById(req.adminId).select("role");
-    if (!admin) return res.status(404).json({ message: "Admin not found" });
-    if (admin.role !== "superadmin") {
-      return res.status(403).json({ message: "Superadmin only" });
-    }
-    next();
-  } catch (e) {
-    res.status(500).json({ message: "Role check failed", error: e.message });
-  }
-};
+/* =====================================================
+   ADMIN CRUD: NORMAL USERS
+===================================================== */
 
-// ====== AUTH ======
-router.post("/register", registerAdmin);
-router.post("/login", loginAdmin);
+router.post("/users", upload.array("profile_photos"), createUserByAdmin);
+router.get("/users", getUsersForAdmin);
+router.get("/users/:id", getUserByIdForAdmin);
+router.patch("/users/:id", upload.array("profile_photos"), updateUserByAdmin);
+router.delete("/users/:id", deleteUserByAdmin);
 
-// Self profile for frontend guard
-router.get("/me", authenticateAdmin, getMe);
+/* User verification/status */
+router.patch("/users/:id/verify", verifyUserProfile);
+router.patch("/users/:id/status", updateUserAccountStatus);
 
-// ====== ADMIN MANAGEMENT ======
-router.put("/verify-admin/:adminId", authenticateAdmin, requireSuperadmin, verifyAdmin);
+/* =====================================================
+   SUPERADMIN: STAFF MANAGEMENT
+===================================================== */
 
-// ====== USER MANAGEMENT (verified admins only) ======
-router.get("/users", authenticateAdmin, requireVerifiedAdmin, getAllUsers);
-router.put("/verify/:userId", authenticateAdmin, requireVerifiedAdmin, verifyUser);
-router.delete("/users/:userId", authenticateAdmin, requireVerifiedAdmin, deleteUser);
+router.post("/staff", createAdminUser);
+router.get("/staff", getAdminUsers);
+router.patch("/staff/:id", updateAdminUser);
+router.patch("/staff/:id/verify", verifyAdminUser);
+router.patch("/staff/:id/status", updateAdminStatus);
+router.patch("/staff/:id/password", resetAdminPassword);
 
 export default router;

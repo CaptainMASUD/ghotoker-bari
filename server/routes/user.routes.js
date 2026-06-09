@@ -1,5 +1,6 @@
 import express from "express";
 import upload from "../middlewares/multer.js";
+
 import {
   registerUser,
   loginUser,
@@ -8,7 +9,10 @@ import {
   changePassword,
   browseUsers,
   getUserPublicProfile,
+  removeProfilePhoto,
+  updateProfileVisibility,
 } from "../controllers/user.controller.js";
+
 import {
   authenticateUser,
   optionalUserAuth,
@@ -16,24 +20,28 @@ import {
 
 const router = express.Router();
 
-// Auth
+/* =====================================================
+   AUTH
+===================================================== */
+
 router.post("/register", upload.array("profile_photos"), registerUser);
 router.post("/login", loginUser);
 
-// Me (must be logged in, but no membership/verification requirement)
+/* =====================================================
+   MY PROFILE
+===================================================== */
+
 router.get("/me", authenticateUser, getMe);
-router.patch(
-  "/me",
-  authenticateUser,
-  upload.array("profile_photos"),
-  updateMe
-);
+router.patch("/me", authenticateUser, upload.array("profile_photos"), updateMe);
 router.patch("/change-password", authenticateUser, changePassword);
+router.patch("/remove-photo", authenticateUser, removeProfilePhoto);
+router.patch("/profile-visibility", authenticateUser, updateProfileVisibility);
 
-// Browse (public; viewer optional)
+/* =====================================================
+   PUBLIC USER BROWSE / PROFILE
+===================================================== */
+
 router.get("/browse", optionalUserAuth, browseUsers);
-
-// Other user's profile (auth optional, used for gating full vs locked)
 router.get("/:id/profile", optionalUserAuth, getUserPublicProfile);
 
 export default router;

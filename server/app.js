@@ -2,13 +2,12 @@
 import express from "express";
 import cors from "cors";
 import http from "http";
-import { Server } from "socket.io";
+
 
 import adminRoutes from "./routes/admin.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import membershipRoutes from "./routes/membership.routes.js";
-import messageRoutes from "./routes/message.routes.js";
-import chatSocket from "./sockets/chat.js";
+
 
 const app = express();
 
@@ -38,9 +37,9 @@ app.options("*", cors());
 app.use(express.json());
 
 // REST routes
-app.use("/api/messages", messageRoutes);
-app.use("/api/admin", adminRoutes);
+
 app.use("/api/user", userRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/memberships", membershipRoutes);
 
 // Error handler
@@ -51,18 +50,8 @@ app.use((err, req, res, next) => {
 });
 
 /* ----------------------- HTTP server + Socket.IO ----------------------- */
-const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    credentials: true,
-    // Socket.IO only needs GET/POST; you can omit this and use the default
-    // methods: ["GET", "POST"],
-  },
-});
 
-chatSocket(io);
-app.set("io", io);
 
-export { app, server, io };
+
+export { app };
