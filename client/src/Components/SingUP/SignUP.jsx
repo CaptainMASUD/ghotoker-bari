@@ -140,7 +140,7 @@ function FieldLabel({ htmlFor, children, required }) {
   return (
     <label
       htmlFor={htmlFor}
-      className="mb-1.5 block text-sm font-semibold text-slate-700"
+      className="mb-1.5 block text-[13px] font-semibold text-slate-700 sm:text-sm"
     >
       {children}
       {required ? <span className="ml-1 text-rose-600">*</span> : null}
@@ -176,7 +176,7 @@ function InputField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`h-11 w-full rounded-xl border bg-white text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100 ${
+          className={`h-12 w-full rounded-xl border bg-white text-[15px] text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100 sm:h-11 sm:text-sm ${
             Icon ? "pl-10" : "pl-3"
           } pr-3 ${
             error
@@ -214,7 +214,7 @@ function SelectField({
           id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`h-11 w-full appearance-none rounded-xl border bg-white pl-3 pr-10 text-sm text-slate-800 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100 ${
+          className={`h-12 w-full appearance-none rounded-xl border bg-white pl-3 pr-10 text-[15px] text-slate-800 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100 sm:h-11 sm:text-sm ${
             error
               ? "border-rose-400 bg-rose-50"
               : "border-slate-200 hover:border-slate-300"
@@ -258,7 +258,7 @@ function TextAreaField({
         maxLength={maxLength}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white px-3 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100 ${
+        className={`w-full rounded-xl border bg-white px-3 py-3 text-[15px] text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100 sm:text-sm ${
           error
             ? "border-rose-400 bg-rose-50"
             : "border-slate-200 hover:border-slate-300"
@@ -296,7 +296,7 @@ function PasswordField({ id, label, value, onChange, error }) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Minimum 6 characters"
-          className={`h-11 w-full rounded-xl border bg-white pl-10 pr-12 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100 ${
+          className={`h-12 w-full rounded-xl border bg-white pl-10 pr-12 text-[15px] text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100 sm:h-11 sm:text-sm ${
             error
               ? "border-rose-400 bg-rose-50"
               : "border-slate-200 hover:border-slate-300"
@@ -389,8 +389,8 @@ function MessageModal({ modal, onClose }) {
 
 function StepIndicator({ currentStep }) {
   return (
-    <div className="mb-8">
-      <div className="grid grid-cols-5 gap-2">
+    <div className="mb-5 sm:mb-8">
+      <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
         {steps.map((step) => {
           const active = step.id === currentStep;
           const completed = step.id < currentStep;
@@ -410,7 +410,7 @@ function StepIndicator({ currentStep }) {
               </div>
 
               <p
-                className={`mt-2 truncate text-center text-xs font-semibold ${
+                className={`mt-1.5 hidden truncate text-center text-[11px] font-semibold sm:block sm:mt-2 sm:text-xs ${
                   active ? "text-rose-700" : "text-slate-500"
                 }`}
               >
@@ -424,9 +424,44 @@ function StepIndicator({ currentStep }) {
   );
 }
 
+function MobileStepSummary({ currentStep, progress }) {
+  const current = steps.find((step) => step.id === currentStep);
+
+  return (
+    <div className="mb-4 rounded-2xl border border-rose-100 bg-gradient-to-br from-white via-rose-50 to-orange-50 p-4 shadow-sm lg:hidden">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-rose-600">
+            Step {currentStep} of {steps.length}
+          </p>
+          <h2 className="mt-1 truncate text-lg font-bold text-slate-900">
+            {current?.title}
+          </h2>
+          <p className="mt-0.5 truncate text-xs text-slate-500">
+            {current?.subtitle}
+          </p>
+        </div>
+
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-sm font-bold text-rose-700 shadow-sm ring-1 ring-rose-100">
+          {progress}%
+        </div>
+      </div>
+
+      <div className="mt-4 h-2 rounded-full bg-white/80 ring-1 ring-rose-100">
+        <motion.div
+          className="h-2 rounded-full bg-rose-600"
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.35 }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function SectionHeader({ icon: Icon, title, subtitle }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-[#fbf7f4] p-4">
+    <div className="rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 via-white to-orange-50 p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white">
           <Icon className="h-5 w-5" />
@@ -1001,15 +1036,11 @@ export default function Register() {
           initial="hidden"
           animate="visible"
           exit="exit"
-          className="space-y-6"
+          className="space-y-5 sm:space-y-6"
         >
-          <SectionHeader
-            icon={ShieldCheck}
-            title="Create your account"
-            subtitle="Use your real information so admin can verify your profile."
-          />
+        
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="first_name"
               label="First Name"
@@ -1033,7 +1064,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="email_address"
               label="Email Address"
@@ -1059,7 +1090,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <PasswordField
               id="password"
               label="Password"
@@ -1088,7 +1119,7 @@ export default function Register() {
           initial="hidden"
           animate="visible"
           exit="exit"
-          className="space-y-6"
+          className="space-y-5 sm:space-y-6"
         >
           <SectionHeader
             icon={Heart}
@@ -1096,7 +1127,7 @@ export default function Register() {
             subtitle="These details help us create a trusted matrimony profile."
           />
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="dob"
               label="Date of Birth"
@@ -1122,7 +1153,7 @@ export default function Register() {
             </SelectField>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <SelectField
               id="religion"
               label="Religion"
@@ -1154,7 +1185,7 @@ export default function Register() {
             </SelectField>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="sect"
               label="Sect / Community"
@@ -1172,7 +1203,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <SelectField
               id="height"
               label="Height"
@@ -1201,7 +1232,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-3">
             <SelectField
               id="current_division"
               label="Current Division"
@@ -1240,7 +1271,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="nid"
               label="NID Number"
@@ -1269,7 +1300,7 @@ export default function Register() {
           initial="hidden"
           animate="visible"
           exit="exit"
-          className="space-y-6"
+          className="space-y-5 sm:space-y-6"
         >
           <SectionHeader
             icon={GraduationCap}
@@ -1277,7 +1308,7 @@ export default function Register() {
             subtitle="Add your education, profession and income details."
           />
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <SelectField
               id="highest_education"
               label="Highest Education"
@@ -1302,7 +1333,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="institution_name"
               label="Institution Name"
@@ -1321,7 +1352,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="profession"
               label="Profession"
@@ -1349,7 +1380,7 @@ export default function Register() {
             </SelectField>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="company_or_business_name"
               label="Company / Business Name"
@@ -1367,7 +1398,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <SelectField
               id="annual_income"
               label="Income Range"
@@ -1403,7 +1434,7 @@ export default function Register() {
           initial="hidden"
           animate="visible"
           exit="exit"
-          className="space-y-6"
+          className="space-y-5 sm:space-y-6"
         >
           <SectionHeader
             icon={Users}
@@ -1411,7 +1442,7 @@ export default function Register() {
             subtitle="Family information helps build a complete biodata."
           />
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="father_occupation"
               label="Father Occupation"
@@ -1433,7 +1464,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-3">
             <SelectField
               id="family_type"
               label="Family Type"
@@ -1474,7 +1505,7 @@ export default function Register() {
             </SelectField>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
             <InputField
               id="number_of_brothers"
               label="Number of Brothers"
@@ -1494,7 +1525,7 @@ export default function Register() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-3">
             <SelectField
               id="diet"
               label="Diet"
@@ -1571,7 +1602,7 @@ export default function Register() {
         initial="hidden"
         animate="visible"
         exit="exit"
-        className="space-y-6"
+        className="space-y-5 sm:space-y-6"
       >
         <SectionHeader
           icon={Heart}
@@ -1579,7 +1610,7 @@ export default function Register() {
           subtitle="Tell us what kind of partner you are looking for."
         />
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-3">
           <SelectField
             id="looking_for"
             label="Looking For"
@@ -1615,7 +1646,7 @@ export default function Register() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
           <SelectField
             id="preferred_religion"
             label="Preferred Religion"
@@ -1643,7 +1674,7 @@ export default function Register() {
           </SelectField>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-3">
           <SelectField
             id="preferred_education"
             label="Preferred Education"
@@ -1726,7 +1757,7 @@ export default function Register() {
         </div>
 
         {profilePhotos.length > 0 ? (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
             {profilePhotos.map((photo, index) => (
               <div
                 key={photo.id}
@@ -1809,25 +1840,27 @@ export default function Register() {
     <>
       <MessageModal modal={modal} onClose={closeModal} />
 
-      <div className="min-h-screen bg-[#f8f3ef] px-4 py-8 text-slate-800 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-[#f8f3ef] px-3 pb-8 pt-24 text-slate-800 sm:px-6 sm:pt-28 lg:px-8 lg:pt-32">
         <div className="mx-auto max-w-6xl">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-lg shadow-rose-200">
+          <div className="mb-5 text-center sm:mb-8">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-lg shadow-rose-200 sm:mb-4 sm:h-14 sm:w-14">
               <Heart className="h-7 w-7" />
             </div>
 
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl md:text-4xl">
               Create Your Matrimony Profile
             </h1>
 
-            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            <p className="mx-auto mt-2 max-w-2xl text-xs leading-5 text-slate-600 sm:text-sm sm:leading-6">
               Complete your profile step by step. Your information will be
               reviewed by admin before full approval.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-            <aside className="h-fit rounded-3xl border border-white bg-white/80 p-5 shadow-sm backdrop-blur lg:sticky lg:top-6">
+          <MobileStepSummary currentStep={currentStep} progress={progress} />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[320px_1fr] lg:gap-6">
+            <aside className="hidden h-fit rounded-3xl border border-white bg-white/80 p-5 shadow-sm backdrop-blur lg:sticky lg:top-28 lg:block">
               <div className="mb-5">
                 <p className="text-sm font-semibold text-slate-500">
                   Registration Progress
@@ -1917,11 +1950,11 @@ export default function Register() {
               </div>
             </aside>
 
-            <main className="rounded-3xl border border-white bg-white p-5 shadow-sm sm:p-7 md:p-8">
-              <div className="mb-6 border-b border-slate-100 pb-5">
+            <main className="overflow-hidden rounded-2xl border border-white bg-white p-4 shadow-sm sm:rounded-3xl sm:p-7 md:p-8">
+              <div className="mb-5 border-b border-slate-100 pb-4 sm:mb-6 sm:pb-5">
                 <StepIndicator currentStep={currentStep} />
 
-                <h2 className="text-2xl font-bold text-slate-900">
+                <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
                   {currentStepInfo?.title}
                 </h2>
 
@@ -1933,12 +1966,12 @@ export default function Register() {
               <form onSubmit={handleSubmit}>
                 <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
 
-                <div className="mt-8 flex items-center justify-between border-t border-slate-100 pt-6">
+                <div className="mt-7 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:mt-8 sm:flex-row sm:items-center sm:justify-between sm:pt-6">
                   <button
                     type="button"
                     onClick={prevStep}
                     disabled={currentStep === 1 || isSubmitting}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-11 sm:w-auto"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     Previous
@@ -1949,7 +1982,7 @@ export default function Register() {
                       type="button"
                       onClick={nextStep}
                       disabled={isSubmitting}
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-6 text-sm font-semibold text-white shadow-lg shadow-rose-100 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-6 text-sm font-semibold text-white shadow-lg shadow-rose-100 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:w-auto"
                     >
                       Continue
                       <ArrowRight className="h-4 w-4" />
@@ -1958,7 +1991,7 @@ export default function Register() {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-6 text-sm font-semibold text-white shadow-lg shadow-rose-100 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-6 text-sm font-semibold text-white shadow-lg shadow-rose-100 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:w-auto"
                     >
                       {isSubmitting ? "Creating Account..." : "Create Account"}
                       <CheckCircle className="h-4 w-4" />
