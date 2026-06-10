@@ -38,7 +38,6 @@ import {
   FileHeart,
   UserCog,
   EyeOff,
-  Sparkle,
 } from "lucide-react";
 
 const bannerImage =
@@ -308,20 +307,20 @@ function SelectBox({ value, onChange, children, icon: Icon }) {
   return (
     <motion.div whileHover={{ y: -1 }} className="relative">
       {Icon ? (
-        <Icon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rose-600" />
+        <Icon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-rose-600" />
       ) : null}
 
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`h-11 w-full appearance-none rounded-2xl border border-white/60 bg-white/95 text-sm font-semibold text-slate-700 shadow-sm outline-none backdrop-blur-md transition hover:bg-white focus:border-rose-300 focus:ring-4 focus:ring-rose-100 ${
-          Icon ? "pl-11" : "pl-4"
-        } pr-10`}
+        className={`h-11 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-bold text-slate-700 outline-none transition hover:border-rose-200 hover:bg-white focus:border-rose-300 focus:bg-white focus:ring-4 focus:ring-rose-100 ${
+          Icon ? "pl-10" : "pl-4"
+        } pr-9`}
       >
         {children}
       </select>
 
-      <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
     </motion.div>
   );
 }
@@ -333,16 +332,18 @@ function StatCard({ item }) {
     <motion.div
       variants={fadeUp}
       whileHover={{ y: -3 }}
-      className="rounded-2xl border border-white/35 bg-white/20 px-4 py-3 shadow-sm backdrop-blur-xl"
+      className="rounded-[1.4rem] border border-slate-100 bg-white px-5 py-4 shadow-sm transition hover:border-rose-100 hover:shadow-md"
     >
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/90 text-rose-600">
+      <div className="flex items-center gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
           <Icon className="h-5 w-5" />
         </div>
 
         <div>
-          <h3 className="text-xl font-bold text-white">{item.value}</h3>
-          <p className="mt-0.5 text-xs font-semibold text-white/75">
+          <h3 className="text-2xl font-black leading-none text-slate-950">
+            {item.value}
+          </h3>
+          <p className="mt-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
             {item.label}
           </p>
         </div>
@@ -418,141 +419,271 @@ function BangladeshFeatureCard({ item, index }) {
   );
 }
 
-function ProfileExperienceSection() {
+function TrustExperienceSection() {
+  const journeyItems = [
+    {
+      title: "Create a clean biodata",
+      text: "Education, profession, family and preference details in one simple flow.",
+      icon: ClipboardCheck,
+    },
+    {
+      title: "Review and verify",
+      text: "Admin review keeps profile quality stronger before public visibility.",
+      icon: FileCheck2,
+    },
+    {
+      title: "Search better matches",
+      text: "Filter by religion, division, age, education and family expectations.",
+      icon: Search,
+    },
+    {
+      title: "Connect with privacy",
+      text: "Photos, phone, email, NID and address stay controlled by privacy rules.",
+      icon: Lock,
+    },
+  ];
+
+  const safetyItems = [
+    { title: "Photo Locked", icon: Camera },
+    { title: "Verified Profiles", icon: BadgeCheck },
+    { title: "Family Friendly", icon: HomeIcon },
+    { title: "Private Contact", icon: ShieldCheck },
+  ];
+
   return (
     <section className="px-4 pb-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="relative overflow-hidden rounded-[2.5rem] border border-white bg-white p-5 shadow-sm md:p-7 lg:p-8">
-          <div className="pointer-events-none absolute -left-20 top-20 h-56 w-56 rounded-full bg-rose-50" />
-          <div className="pointer-events-none absolute -right-24 bottom-10 h-64 w-64 rounded-full bg-slate-50" />
+        <motion.div
+          variants={staggerWrap}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-80px" }}
+          className="grid gap-6 lg:grid-cols-[0.86fr_1.14fr] lg:items-stretch"
+        >
+          <motion.div
+            variants={fadeUp}
+            className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-sm md:p-8"
+          >
+            <img
+              src={biodataImage}
+              alt="Bangladeshi matrimony biodata"
+              className="absolute inset-0 h-full w-full object-cover opacity-35"
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/88 to-rose-950/65" />
 
-          <div className="relative grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-            <motion.div
-              variants={fadeUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-80px" }}
-              className="relative overflow-hidden rounded-[2rem] bg-slate-950"
-            >
-              <img
-                src={biodataImage}
-                alt="Bangladeshi matrimony biodata"
-                className="h-[480px] w-full object-cover opacity-75"
-              />
-
-              <div className="absolute inset-0 bg-slate-950/40" />
-
-              <div className="absolute left-5 right-5 top-5">
-                <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-bold text-rose-700">
-                  <FileHeart className="h-4 w-4" />
-                  Better Biodata
+            <div className="relative flex min-h-[420px] flex-col justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white/85 backdrop-blur">
+                  <FileHeart className="h-4 w-4 text-rose-200" />
+                  Better Profile Flow
                 </div>
-              </div>
 
-              <div className="absolute bottom-5 left-5 right-5 rounded-[1.5rem] border border-white/30 bg-white/20 p-5 text-white backdrop-blur-xl">
-                <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
-                  Improve your profile experience
+                <h2 className="mt-6 max-w-md text-3xl font-bold leading-tight tracking-tight md:text-4xl">
+                  One clean layout for biodata, matching and safety.
                 </h2>
 
-                <p className="mt-3 text-sm leading-6 text-white/80">
-                  A complete biodata helps families understand education,
-                  profession, family values, lifestyle and expectations clearly.
+                <p className="mt-4 max-w-md text-sm leading-7 text-white/75 md:text-base">
+                  A focused experience for Bangladeshi families: less clutter,
+                  stronger trust and clear match actions.
                 </p>
-
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl bg-white/15 p-3">
-                    <p className="text-xl font-bold">70%+</p>
-                    <p className="text-xs font-semibold text-white/70">
-                      Better completion goal
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-white/15 p-3">
-                    <p className="text-xl font-bold">Safe</p>
-                    <p className="text-xs font-semibold text-white/70">
-                      Public photo locked
-                    </p>
-                  </div>
-                </div>
               </div>
-            </motion.div>
 
-            <motion.div
-              variants={staggerWrap}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-80px" }}
-              className="space-y-4"
-            >
+              <div className="mt-8 grid grid-cols-2 gap-3">
+                {[
+                  { value: "70%+", label: "Profile quality" },
+                  { value: "Safe", label: "Privacy first" },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur"
+                  >
+                    <p className="text-2xl font-bold">{item.value}</p>
+                    <p className="mt-1 text-xs font-semibold text-white/65">
+                      {item.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div variants={fadeUp} className="rounded-[2rem] bg-white p-5 shadow-sm md:p-7">
+            <div className="grid gap-6 xl:grid-cols-[1fr_0.78fr] xl:items-center">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-rose-700">
                   <UserCog className="h-4 w-4" />
-                  Profile Quality Guide
+                  Guided Match Journey
                 </div>
 
                 <h2 className="mt-4 max-w-xl text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">
-                  Guide users to make a stronger marriage biodata.
+                  Make the important steps easy to understand.
                 </h2>
 
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
-                  These simple steps help a user improve trust, reduce confusion
-                  and get better responses from serious families.
+                  Instead of separate scattered cards, this section groups the
+                  user journey into a simple sequence.
                 </p>
-              </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                {profileTips.map((item) => {
-                  const Icon = item.icon;
+                <div className="mt-6 space-y-3">
+                  {journeyItems.map((item, index) => {
+                    const Icon = item.icon;
 
-                  return (
-                    <motion.div
-                      key={item.title}
-                      variants={fadeUp}
-                      whileHover={{ y: -4 }}
-                      className="group relative overflow-hidden rounded-[1.75rem] border border-slate-100 bg-[#fffaf7] p-5"
-                    >
-                      <div className="absolute -right-6 -top-6 flex h-20 w-20 items-center justify-center rounded-full bg-white text-sm font-bold text-rose-200 transition group-hover:text-rose-300">
-                        {item.step}
-                      </div>
+                    return (
+                      <motion.div
+                        key={item.title}
+                        variants={fadeUp}
+                        whileHover={{ x: 4 }}
+                        className="group flex gap-4 rounded-2xl border border-slate-100 bg-[#fffaf7] p-4 transition hover:border-rose-100 hover:bg-white"
+                      >
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-rose-600 shadow-sm">
+                          <Icon className="h-5 w-5" />
+                        </div>
 
-                      <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-rose-600 shadow-sm">
-                        <Icon className="h-5 w-5" />
-                      </div>
-
-                      <h3 className="relative mt-5 text-base font-bold text-slate-950">
-                        {item.title}
-                      </h3>
-
-                      <p className="relative mt-2 text-sm leading-6 text-slate-500">
-                        {item.text}
-                      </p>
-                    </motion.div>
-                  );
-                })}
-              </div>
-
-              <div className="rounded-[1.75rem] border border-emerald-100 bg-emerald-50 p-5">
-                <div className="flex gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600">
-                    <EyeOff className="h-5 w-5" />
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-bold text-emerald-900">
-                      Privacy reminder
-                    </h4>
-
-                    <p className="mt-1 text-sm leading-6 text-emerald-700">
-                      Sensitive data should never be shown publicly. Keep photo,
-                      phone, email, address, NID and income visibility
-                      controlled by membership and privacy rules.
-                    </p>
-                  </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-rose-300">
+                              {String(index + 1).padStart(2, "0")}
+                            </span>
+                            <h3 className="text-sm font-bold text-slate-950 md:text-base">
+                              {item.title}
+                            </h3>
+                          </div>
+                          <p className="mt-1 text-sm leading-6 text-slate-500">
+                            {item.text}
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
-            </motion.div>
-          </div>
-        </div>
+
+              <div className="grid gap-4">
+                <div className="overflow-hidden rounded-[1.75rem] border border-slate-100 bg-slate-50">
+                  <img
+                    src={aboutImage}
+                    alt="About Ghotoker Bari"
+                    className="h-52 w-full object-cover"
+                  />
+                  <div className="p-5">
+                    <h3 className="text-xl font-bold text-slate-950">
+                      About Ghotoker Bari
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      A privacy-first marriage media platform for verified
+                      biodata and family-friendly matching.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = "/about";
+                      }}
+                      className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-rose-700"
+                    >
+                      Learn More
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {safetyItems.map((item) => {
+                    const Icon = item.icon;
+
+                    return (
+                      <div
+                        key={item.title}
+                        className="rounded-2xl border border-rose-100 bg-rose-50/50 p-4"
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-rose-600 shadow-sm">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <p className="mt-3 text-sm font-bold text-slate-800">
+                          {item.title}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+
+        <motion.div
+          variants={staggerWrap}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-80px" }}
+          className="mt-6 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-center"
+        >
+          <motion.div variants={fadeUp} className="grid gap-4 sm:grid-cols-2">
+            {howItWorks.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <motion.div
+                  key={item.title}
+                  whileHover={{ y: -4 }}
+                  className="rounded-[1.6rem] border border-white bg-white p-5 shadow-sm"
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-base font-bold text-slate-950">
+                    {item.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    {item.description}
+                  </p>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+
+          <motion.div
+            variants={fadeUp}
+            className="relative overflow-hidden rounded-[2rem] bg-white shadow-sm"
+          >
+            <div className="grid md:grid-cols-[0.9fr_1.1fr] md:items-center">
+              <img
+                src={familyImage}
+                alt="Family assisted marriage support"
+                className="h-64 w-full object-cover md:h-full"
+              />
+
+              <div className="p-6 md:p-8">
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-emerald-700">
+                  <ShieldCheck className="h-4 w-4" />
+                  Safety First
+                </div>
+
+                <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
+                  Privacy and trust come first.
+                </h2>
+
+                <p className="mt-3 text-sm leading-7 text-slate-600">
+                  Photos, contact information and sensitive biodata are handled
+                  with controlled visibility, so users can search with more
+                  confidence.
+                </p>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {["Photo privacy", "Hidden contact", "Admin review"].map(
+                    (item) => (
+                      <span
+                        key={item}
+                        className="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600"
+                      >
+                        {item}
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
       </div>
     </section>
   );
@@ -887,137 +1018,157 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f8f3ef] text-slate-800">
       {/* HERO */}
-      <section className="px-3 pt-[92px] sm:px-5 lg:px-6">
-        <div className="mx-auto max-w-[1800px]">
-          <div className="relative overflow-hidden rounded-[1.75rem] bg-slate-950 shadow-xl shadow-rose-100">
-            <img
-              src={bannerImage}
-              alt="Ghotoker Bari matrimony banner"
-              className="h-[500px] w-full object-cover opacity-75 md:h-[530px] xl:h-[560px]"
-            />
+      <section className="pt-[74px] sm:px-6 sm:pt-[86px] lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="relative">
+            {/* Mobile: full-width banner first, then filters below. Desktop keeps a premium contained banner. */}
+            <div className="relative w-full overflow-hidden bg-slate-950 shadow-xl shadow-rose-100/70 sm:rounded-[1.75rem] lg:rounded-[2rem]">
+              <img
+                src={bannerImage}
+                alt="Ghotoker Bari matrimony banner"
+                className="h-[185px] w-full object-cover opacity-85 sm:h-[285px] md:h-[335px] lg:h-[395px]"
+              />
 
-            <div className="absolute inset-0 bg-slate-950/48" />
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/78 via-slate-950/40 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-transparent" />
 
-            <div className="absolute inset-x-0 top-0 flex justify-center px-5 pt-12 sm:pt-14 lg:pt-16">
-              <motion.div
-                variants={staggerWrap}
-                initial="hidden"
-                animate="visible"
-                className="max-w-4xl text-center"
-              >
+              <div className="absolute inset-0 flex items-center">
                 <motion.div
-                  variants={fadeUp}
-                  className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/35 bg-white/90 px-4 py-2 text-xs font-bold uppercase tracking-wide text-rose-700 shadow-sm backdrop-blur"
+                  variants={staggerWrap}
+                  initial="hidden"
+                  animate="visible"
+                  className="w-full px-4 sm:px-8 lg:px-12"
                 >
-                  <CalendarHeart className="h-4 w-4" />
-                  Bangladesh Marriage Media Platform
+                  <motion.div
+                    variants={fadeUp}
+                    className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/95 px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-rose-700 shadow-sm backdrop-blur sm:mb-3 sm:text-xs"
+                  >
+                    <CalendarHeart className="h-3.5 w-3.5" />
+                    Bangladesh Matrimony
+                  </motion.div>
+
+                  <motion.h1
+                    variants={fadeUp}
+                    className="max-w-[260px] text-[26px] font-black leading-[1.05] tracking-tight text-white sm:max-w-2xl sm:text-4xl lg:text-5xl"
+                  >
+                    Find your trusted life partner.
+                  </motion.h1>
                 </motion.div>
-
-                <motion.h1
-                  variants={fadeUp}
-                  className="mx-auto max-w-3xl text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl"
-                >
-                  Find a trusted life partner with Ghotoker Bari.
-                </motion.h1>
-
-                <motion.p
-                  variants={fadeUp}
-                  className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-white/85 md:text-base"
-                >
-                  A privacy-first Bangladeshi matrimony platform for verified
-                  biodata, family-friendly matching, protected photos and safe
-                  communication.
-                </motion.p>
-              </motion.div>
+              </div>
             </div>
 
-            <div className="absolute inset-x-0 bottom-6 px-5 sm:px-8 lg:px-14 xl:px-20">
-              <motion.div
-                initial={{ opacity: 0, y: 26 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.65, delay: 0.2 }}
-                className="mx-auto max-w-7xl rounded-[1.75rem] border border-white/35 bg-white/18 p-3 shadow-2xl backdrop-blur-xl md:p-4"
-              >
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-                  <SelectBox
-                    value={filters.lookingFor}
-                    onChange={(value) => updateFilter("lookingFor", value)}
-                    icon={Heart}
-                  >
-                    <option value="">Looking For</option>
-                    <option value="bride">Bride</option>
-                    <option value="groom">Groom</option>
-                  </SelectBox>
+            {/* Search card: mobile stays after the banner, desktop slightly overlaps for premium look */}
+            <motion.div
+              initial={{ opacity: 0, y: 22 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.16 }}
+              className="relative z-10 mx-4 mt-4 rounded-[1.4rem] border border-white bg-white p-3 shadow-xl shadow-rose-100/80 sm:mx-auto sm:-mt-9 sm:max-w-6xl sm:p-4 lg:-mt-11 lg:rounded-[1.75rem]"
+            >
+              <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wide text-rose-600 sm:text-[11px]">
+                    Find Matches
+                  </p>
+                  <h2 className="mt-0.5 text-[15px] font-black text-slate-950 sm:text-lg">
+                    Search verified profiles
+                  </h2>
+                </div>
 
-                  <SelectBox
-                    value={filters.religion}
-                    onChange={(value) => updateFilter("religion", value)}
-                    icon={ShieldCheck}
-                  >
-                    <option value="">Religion</option>
-                    {religions.map((religion) => (
-                      <option key={religion} value={religion}>
-                        {religion}
-                      </option>
-                    ))}
-                  </SelectBox>
+                <div className="hidden rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 sm:block">
+                  Bride / Groom
+                </div>
+              </div>
 
-                  <SelectBox
-                    value={filters.division}
-                    onChange={(value) => updateFilter("division", value)}
-                    icon={MapPin}
-                  >
-                    <option value="">Division</option>
-                    {divisions.map((division) => (
-                      <option key={division} value={division}>
-                        {division}
-                      </option>
-                    ))}
-                  </SelectBox>
+              <div className="rounded-[1.15rem] border border-slate-100 bg-slate-50 p-2.5 sm:rounded-[1.25rem] sm:p-3">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-[1fr_1fr_1fr_1fr_140px]">
+                  <div className="col-span-2 sm:col-span-1">
+                    <SelectBox
+                      value={filters.lookingFor}
+                      onChange={(value) => updateFilter("lookingFor", value)}
+                      icon={Heart}
+                    >
+                      <option value="">Looking For</option>
+                      <option value="bride">Bride</option>
+                      <option value="groom">Groom</option>
+                    </SelectBox>
+                  </div>
 
-                  <SelectBox
-                    value={filters.ageRange}
-                    onChange={(value) => updateFilter("ageRange", value)}
-                    icon={Users}
-                  >
-                    <option value="">Age Range</option>
-                    {ageRanges.map((age) => (
-                      <option key={age} value={age}>
-                        {age}
-                      </option>
-                    ))}
-                  </SelectBox>
+                  <div className="col-span-1">
+                    <SelectBox
+                      value={filters.religion}
+                      onChange={(value) => updateFilter("religion", value)}
+                      icon={ShieldCheck}
+                    >
+                      <option value="">Religion</option>
+                      {religions.map((religion) => (
+                        <option key={religion} value={religion}>
+                          {religion}
+                        </option>
+                      ))}
+                    </SelectBox>
+                  </div>
+
+                  <div className="col-span-1">
+                    <SelectBox
+                      value={filters.division}
+                      onChange={(value) => updateFilter("division", value)}
+                      icon={MapPin}
+                    >
+                      <option value="">Division</option>
+                      {divisions.map((division) => (
+                        <option key={division} value={division}>
+                          {division}
+                        </option>
+                      ))}
+                    </SelectBox>
+                  </div>
+
+                  <div className="col-span-2 sm:col-span-1">
+                    <SelectBox
+                      value={filters.ageRange}
+                      onChange={(value) => updateFilter("ageRange", value)}
+                      icon={Users}
+                    >
+                      <option value="">Age Range</option>
+                      {ageRanges.map((age) => (
+                        <option key={age} value={age}>
+                          {age}
+                        </option>
+                      ))}
+                    </SelectBox>
+                  </div>
 
                   <motion.button
                     whileHover={{ y: -1 }}
                     whileTap={{ scale: 0.98 }}
                     type="button"
                     onClick={handleSearch}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-rose-600 px-7 text-sm font-bold text-white shadow-lg shadow-rose-950/20 transition hover:bg-rose-700"
+                    className="col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-6 text-sm font-black text-white shadow-lg shadow-rose-200 transition hover:bg-rose-700 sm:col-span-1 lg:col-span-1"
                   >
                     <Search className="h-4 w-4" />
                     Search
                   </motion.button>
                 </div>
+              </div>
+            </motion.div>
 
-                <motion.div
-                  variants={staggerWrap}
-                  initial="hidden"
-                  animate="visible"
-                  className="mt-3 grid gap-3 md:grid-cols-3"
-                >
-                  {stats.map((item) => (
-                    <StatCard key={item.label} item={item} />
-                  ))}
-                </motion.div>
-              </motion.div>
-            </div>
+            {/* Stats: compact feature strip */}
+            <motion.div
+              variants={staggerWrap}
+              initial="hidden"
+              animate="visible"
+              className="mx-4 mt-4 grid gap-3 sm:mx-auto sm:max-w-6xl sm:grid-cols-3"
+            >
+              {stats.map((item) => (
+                <StatCard key={item.label} item={item} />
+              ))}
+            </motion.div>
           </div>
         </div>
       </section>
 
       {/* BANGLADESH FEATURES */}
-      <section className="px-4 py-20 sm:px-6 lg:px-8">
+      <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle
             eyebrow="Made For Bangladesh"
@@ -1054,163 +1205,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PROFILE EXPERIENCE */}
-      <ProfileExperienceSection />
-
-      {/* ABOUT */}
-      <section className="px-4 pb-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <motion.div
-            variants={staggerWrap}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-80px" }}
-            className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center"
-          >
-            <motion.div
-              variants={fadeUp}
-              className="overflow-hidden rounded-[2.2rem] border border-white bg-white shadow-sm"
-            >
-              <img
-                src={aboutImage}
-                alt="About Ghotoker Bari"
-                className="h-72 w-full object-cover"
-              />
-
-              <div className="p-6 md:p-8">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-                  <Heart className="h-7 w-7" />
-                </div>
-
-                <h2 className="mt-5 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">
-                  About Ghotoker Bari
-                </h2>
-
-                <p className="mt-4 text-sm leading-7 text-slate-600 md:text-base">
-                  Ghotoker Bari is a privacy-first marriage media platform built
-                  for Bangladeshi families and individuals who want a clean,
-                  trusted and professional matchmaking experience.
-                </p>
-
-                <p className="mt-4 text-sm leading-7 text-slate-600 md:text-base">
-                  We focus on verified profiles, limited public visibility,
-                  protected profile photos, smart filters and human-assisted
-                  support so users can search confidently.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.href = "/about";
-                  }}
-                  className="mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-6 text-sm font-bold text-white transition hover:bg-rose-700"
-                >
-                  Learn More
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
-            </motion.div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              {howItWorks.map((item) => {
-                const Icon = item.icon;
-
-                return (
-                  <motion.div
-                    key={item.title}
-                    variants={fadeUp}
-                    whileHover={{ y: -4 }}
-                    className="rounded-[2rem] border border-white bg-white p-6 shadow-sm"
-                  >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-                      <Icon className="h-6 w-6" />
-                    </div>
-
-                    <h3 className="mt-5 text-lg font-bold text-slate-950">
-                      {item.title}
-                    </h3>
-
-                    <p className="mt-2 text-sm leading-6 text-slate-500">
-                      {item.description}
-                    </p>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* SAFETY */}
-      <section className="px-4 pb-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-            <motion.div
-              variants={staggerWrap}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-80px" }}
-              className="grid gap-4 sm:grid-cols-2"
-            >
-              {[
-                {
-                  title: "Photo Privacy",
-                  text: "Photos stay locked in public browse and match cards.",
-                  icon: Lock,
-                },
-                {
-                  title: "Sensitive Data Hidden",
-                  text: "Phone, email, address, NID, passport and income are controlled.",
-                  icon: ShieldAlert,
-                },
-                {
-                  title: "Admin Verification",
-                  text: "Profiles can be reviewed before approval and better visibility.",
-                  icon: BadgeCheck,
-                },
-                {
-                  title: "Family-Friendly Flow",
-                  text: "Useful biodata structure for parents and guardians.",
-                  icon: Building2,
-                },
-              ].map((item) => (
-                <InfoCard key={item.title} item={item} />
-              ))}
-            </motion.div>
-
-            <motion.div
-              variants={fadeUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-80px" }}
-              className="overflow-hidden rounded-[2.2rem] border border-white bg-white shadow-sm"
-            >
-              <img
-                src={familyImage}
-                alt="Family assisted marriage support"
-                className="h-80 w-full object-cover"
-              />
-
-              <div className="p-6 md:p-8">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-                  <ShieldCheck className="h-7 w-7" />
-                </div>
-
-                <h2 className="mt-5 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">
-                  Privacy and trust come first
-                </h2>
-
-                <p className="mt-4 text-sm leading-7 text-slate-600 md:text-base">
-                  A marriage platform needs stronger privacy than normal social
-                  media. That is why Ghotoker Bari protects profile photos,
-                  sensitive information and contact details with controlled
-                  visibility.
-                </p>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
+      {/* TRUST EXPERIENCE */}
+      <TrustExperienceSection />
 
       {/* PACKAGES */}
       <section className="px-4 pb-20 sm:px-6 lg:px-8">

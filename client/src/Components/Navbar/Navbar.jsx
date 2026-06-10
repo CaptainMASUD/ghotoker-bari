@@ -137,9 +137,17 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // ✅ Every time route/component changes, show the new route from the top.
+  // This is better than adding scroll logic on every single Link click.
   useEffect(() => {
     setIsOpen(false);
     setShowProfileMenu(false);
+
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
   }, [location.pathname]);
 
   useEffect(() => {
@@ -155,6 +163,11 @@ export default function Navbar() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const closeMenus = () => {
+    setIsOpen(false);
+    setShowProfileMenu(false);
+  };
 
   const handleLogout = () => {
     dispatch(logout());
@@ -183,6 +196,7 @@ export default function Navbar() {
       <div className="mx-auto flex h-[74px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <NavLink
           to="/"
+          onClick={closeMenus}
           className="flex min-w-0 items-center gap-3"
           aria-label="ঘটকদের বাড়ি home"
         >
@@ -213,7 +227,12 @@ export default function Navbar() {
 
         <div className="hidden items-center gap-1 rounded-full bg-white/70 p-1 shadow-sm ring-1 ring-slate-100 lg:flex">
           {navLinks.map((item) => (
-            <DesktopNavItem key={item.to} to={item.to} label={item.label} />
+            <DesktopNavItem
+              key={item.to}
+              to={item.to}
+              label={item.label}
+              onNavigate={closeMenus}
+            />
           ))}
         </div>
 
@@ -222,6 +241,7 @@ export default function Navbar() {
             <>
               <NavLink
                 to="/login"
+                onClick={closeMenus}
                 className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-200 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
               >
                 Login
@@ -229,6 +249,7 @@ export default function Navbar() {
 
               <NavLink
                 to="/register"
+                onClick={closeMenus}
                 className="inline-flex h-11 items-center justify-center rounded-full bg-rose-600 px-6 text-sm font-bold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-700 hover:shadow-md"
               >
                 Join Now
@@ -309,7 +330,7 @@ export default function Navbar() {
                     <div className="mt-2 space-y-1">
                       <NavLink
                         to={profilePath}
-                        onClick={() => setShowProfileMenu(false)}
+                        onClick={closeMenus}
                         className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-rose-50 hover:text-rose-700"
                       >
                         {isAdmin ? (
@@ -324,7 +345,7 @@ export default function Navbar() {
                       {isAdmin && (
                         <NavLink
                           to="/admin/users"
-                          onClick={() => setShowProfileMenu(false)}
+                          onClick={closeMenus}
                           className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-rose-50 hover:text-rose-700"
                         >
                           <ShieldCheck className="h-4 w-4" />
@@ -373,7 +394,12 @@ export default function Navbar() {
           >
             <div className="space-y-2 px-4 py-4 sm:px-6">
               {navLinks.map((item) => (
-                <MobileNavItem key={item.to} to={item.to} label={item.label} />
+                <MobileNavItem
+                  key={item.to}
+                  to={item.to}
+                  label={item.label}
+                  onNavigate={closeMenus}
+                />
               ))}
 
               <div className="mt-4 border-t border-slate-100 pt-4">
@@ -381,7 +407,7 @@ export default function Navbar() {
                   <div className="grid grid-cols-1 gap-3">
                     <NavLink
                       to="/login"
-                      onClick={() => setIsOpen(false)}
+                      onClick={closeMenus}
                       className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-rose-50 hover:text-rose-700"
                     >
                       Login
@@ -389,7 +415,7 @@ export default function Navbar() {
 
                     <NavLink
                       to="/register"
-                      onClick={() => setIsOpen(false)}
+                      onClick={closeMenus}
                       className="inline-flex h-12 items-center justify-center rounded-2xl bg-rose-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 hover:shadow-md"
                     >
                       Join Now
@@ -424,7 +450,7 @@ export default function Navbar() {
 
                     <NavLink
                       to={profilePath}
-                      onClick={() => setIsOpen(false)}
+                      onClick={closeMenus}
                       className="flex h-12 items-center justify-center rounded-2xl bg-rose-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 hover:shadow-md"
                     >
                       {isAdmin ? "Dashboard" : "My Profile"}
@@ -433,7 +459,7 @@ export default function Navbar() {
                     {isAdmin && (
                       <NavLink
                         to="/admin/users"
-                        onClick={() => setIsOpen(false)}
+                        onClick={closeMenus}
                         className="flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-rose-50 hover:text-rose-700"
                       >
                         Manage Users
@@ -458,11 +484,12 @@ export default function Navbar() {
   );
 }
 
-function DesktopNavItem({ to, label }) {
+function DesktopNavItem({ to, label, onNavigate }) {
   return (
     <NavLink
       to={to}
       end={to === "/"}
+      onClick={onNavigate}
       className={({ isActive }) =>
         `${desktopLinkBase} ${
           isActive ? desktopLinkActive : desktopLinkInactive
@@ -474,11 +501,12 @@ function DesktopNavItem({ to, label }) {
   );
 }
 
-function MobileNavItem({ to, label }) {
+function MobileNavItem({ to, label, onNavigate }) {
   return (
     <NavLink
       to={to}
       end={to === "/"}
+      onClick={onNavigate}
       className={({ isActive }) =>
         `${mobileLinkBase} ${isActive ? mobileLinkActive : mobileLinkInactive}`
       }

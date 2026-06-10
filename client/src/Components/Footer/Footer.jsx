@@ -9,6 +9,16 @@ import {
 } from "react-icons/fa";
 import logo from "../../Logo/logo.svg";
 
+function scrollToPageTop() {
+  requestAnimationFrame(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "smooth",
+    });
+  });
+}
+
 export default function Footer() {
   const quickLinks = [
     { label: "Home", to: "/" },
@@ -39,6 +49,7 @@ export default function Footer() {
             <div className="space-y-4">
               <Link
                 to="/"
+                onClick={scrollToPageTop}
                 className="inline-flex items-center gap-3"
                 aria-label="ঘটকদের বাড়ি home"
               >
@@ -86,9 +97,17 @@ export default function Footer() {
               </div>
             </div>
 
-            <FooterNav title="Quick Links" links={quickLinks} />
+            <FooterNav
+              title="Quick Links"
+              links={quickLinks}
+              onNavigate={scrollToPageTop}
+            />
 
-            <FooterNav title="Resources" links={resourceLinks} />
+            <FooterNav
+              title="Resources"
+              links={resourceLinks}
+              onNavigate={scrollToPageTop}
+            />
 
             <div className="space-y-4">
               <h3 className="text-base font-bold text-white">Newsletter</h3>
@@ -129,6 +148,7 @@ export default function Footer() {
                   By subscribing you agree to our{" "}
                   <Link
                     to="/terms-conditions"
+                    onClick={scrollToPageTop}
                     className="font-medium text-white/65 underline-offset-4 hover:text-rose-400 hover:underline"
                   >
                     Terms
@@ -136,6 +156,7 @@ export default function Footer() {
                   and{" "}
                   <Link
                     to="/privacy-policy"
+                    onClick={scrollToPageTop}
                     className="font-medium text-white/65 underline-offset-4 hover:text-rose-400 hover:underline"
                   >
                     Privacy Policy
@@ -161,6 +182,7 @@ export default function Footer() {
             <div className="flex items-center gap-4">
               <Link
                 to="/privacy-policy"
+                onClick={scrollToPageTop}
                 className="transition hover:text-rose-400"
               >
                 Privacy
@@ -168,12 +190,17 @@ export default function Footer() {
 
               <Link
                 to="/terms-conditions"
+                onClick={scrollToPageTop}
                 className="transition hover:text-rose-400"
               >
                 Terms
               </Link>
 
-              <Link to="/contact" className="transition hover:text-rose-400">
+              <Link
+                to="/contact"
+                onClick={scrollToPageTop}
+                className="transition hover:text-rose-400"
+              >
                 Support
               </Link>
             </div>
@@ -184,7 +211,7 @@ export default function Footer() {
   );
 }
 
-function FooterNav({ title, links }) {
+function FooterNav({ title, links, onNavigate }) {
   return (
     <nav className="space-y-4">
       <h3 className="text-base font-bold text-white">{title}</h3>
@@ -194,6 +221,7 @@ function FooterNav({ title, links }) {
           <li key={link.label}>
             <Link
               to={link.to}
+              onClick={onNavigate}
               className="inline-flex text-white/65 transition hover:translate-x-1 hover:text-rose-400"
             >
               {link.label}
