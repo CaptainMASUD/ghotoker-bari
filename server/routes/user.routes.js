@@ -14,6 +14,12 @@ import {
 } from "../controllers/user.controller.js";
 
 import {
+  getMyMatches,
+  getRecommendedMatches,
+  getNearbyMatches,
+} from "../controllers/match.controller.js";
+
+import {
   authenticateUser,
   optionalUserAuth,
 } from "../middlewares/auth.middleware.js";
@@ -36,6 +42,15 @@ router.patch("/me", authenticateUser, upload.array("profile_photos"), updateMe);
 router.patch("/change-password", authenticateUser, changePassword);
 router.patch("/remove-photo", authenticateUser, removeProfilePhoto);
 router.patch("/profile-visibility", authenticateUser, updateProfileVisibility);
+
+/* =====================================================
+   MATCH FINDING
+   Keep these before /:id/profile
+===================================================== */
+
+router.get("/matches", authenticateUser, getMyMatches);
+router.get("/matches/recommended", authenticateUser, getRecommendedMatches);
+router.get("/matches/nearby", authenticateUser, getNearbyMatches);
 
 /* =====================================================
    PUBLIC USER BROWSE / PROFILE

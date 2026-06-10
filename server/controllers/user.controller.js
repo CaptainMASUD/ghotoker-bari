@@ -20,10 +20,6 @@ const PUBLIC_CARD_PROJECTION = `
   current_district
   current_city
   profession
-  highest_education
-  height
-  height_cm
-  profile_photos
   isVerified
   profile_status
   createdAt
@@ -318,26 +314,48 @@ const buildLockedProfile = (user) => {
     _id: user?._id,
     full_name: fullName || "User",
     first_name: user?.first_name || null,
-    last_name: user?.last_name || null,
-    gender: user?.gender || null,
     age: calculateAge(user?.dob),
-    marital_status: user?.marital_status || null,
+    gender: user?.gender || null,
     religion: user?.religion || null,
+    marital_status: user?.marital_status || null,
     current_division: user?.current_division || null,
     current_district: user?.current_district || null,
-    current_city: user?.current_city || null,
     profession: user?.profession || null,
-    highest_education: user?.highest_education || null,
-    height: user?.height || null,
-    height_cm: user?.height_cm || null,
-    profile_photos:
-      Array.isArray(user?.profile_photos) && user.profile_photos.length > 0
-        ? [user.profile_photos[0]]
-        : [],
     isVerified: Boolean(user?.isVerified),
     profile_status: user?.profile_status,
+
+    // Public/locked users must never receive real image URLs.
+    profile_photos: [],
+    profile_photo_locked: true,
+    profile_locked: true,
     locked: true,
   };
+};
+
+const sanitizeFullProfileForViewer = (user, viewer) => {
+  const safeUser = buildFullUser(user);
+
+  const isAdminViewer = viewer && ADMIN_ROLES.includes(viewer.role);
+  const isOwner = viewer && String(viewer._id || viewer.id) === String(user?._id);
+  const membershipStatus = buildMembershipStatus(viewer);
+
+  const canSeePhotos =
+    isAdminViewer ||
+    isOwner ||
+    (membershipStatus.active &&
+      membershipStatus.can_view_full_profiles &&
+      ["members_only", "premium_only", "public"].includes(
+        user?.profile_photo_visibility || "members_only"
+      ));
+
+  if (!canSeePhotos) {
+    safeUser.profile_photos = [];
+    safeUser.profile_photo_locked = true;
+  } else {
+    safeUser.profile_photo_locked = false;
+  }
+
+  return safeUser;
 };
 
 const viewerCanSeeFull = (viewer) => {
@@ -1083,7 +1101,7 @@ export const getUserPublicProfile = async (req, res) => {
     if (viewerCanSeeFull(viewer)) {
       return res.status(200).json({
         locked: false,
-        user: buildFullUser(target),
+        user: sanitizeFullProfileForViewer(target, viewer),
       });
     }
 

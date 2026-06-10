@@ -7,7 +7,7 @@ import http from "http";
 import adminRoutes from "./routes/admin.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import membershipRoutes from "./routes/membership.routes.js";
-
+import contactRoutes from "./routes/contact.route.js";
 
 const app = express();
 
@@ -41,6 +41,7 @@ app.use(express.json());
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/memberships", membershipRoutes);
+app.use("/api/contact", contactRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

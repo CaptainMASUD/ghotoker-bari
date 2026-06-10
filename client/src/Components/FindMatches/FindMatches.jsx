@@ -1,563 +1,872 @@
-// FindMatches.jsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaHeart, FaStar, FaMapMarkerAlt, FaGraduationCap, FaBriefcase,
-  FaMale, FaFemale, FaChevronDown, FaTimes, FaLock, FaEnvelope
-} from "react-icons/fa";
-import { motion } from "framer-motion";
+  Heart,
+  MapPin,
+  Briefcase,
+  ShieldCheck,
+  Lock,
+  SlidersHorizontal,
+  Users,
+  RefreshCw,
+  ChevronDown,
+  Star,
+  Eye,
+  Filter,
+  X,
+  AlertCircle,
+  Loader2,
+  BadgeCheck,
+  Search,
+  UserRound,
+} from "lucide-react";
 
-/* ------------------------ Config ------------------------ */
-const API = "http://localhost:4000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-/* ------------------------ UI helpers ------------------------ */
-const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.45, delay } },
-});
+const religions = ["Islam", "Hinduism", "Buddhism", "Christianity", "Other"];
 
-const hasAnyValue = (obj) =>
-  Object.values(obj).some((v) => v !== "" && v !== null && v !== undefined);
+const divisions = [
+  "Dhaka",
+  "Chattogram",
+  "Rajshahi",
+  "Khulna",
+  "Barishal",
+  "Sylhet",
+  "Rangpur",
+  "Mymensingh",
+];
 
-function useOutsideClose(ref, onClose) {
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose?.(); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [ref, onClose]);
+const educationOptions = [
+  "SSC",
+  "HSC",
+  "Diploma",
+  "Bachelor",
+  "Masters",
+  "PhD",
+  "Other",
+];
+
+const genderOptions = [
+  { label: "Male", value: "male" },
+  { label: "Female", value: "female" },
+  { label: "Other", value: "other" },
+];
+
+const maritalStatuses = [
+  { label: "Never Married", value: "never_married" },
+  { label: "Divorced", value: "divorced" },
+  { label: "Widowed", value: "widowed" },
+  { label: "Separated", value: "separated" },
+];
+
+function getToken() {
+  return localStorage.getItem("token") || "";
 }
 
-/* ----------------------- Reusable Dropdown ----------------------- */
-function Dropdown({ label, options, selected, onChange }) {
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef(null);
-  useOutsideClose(boxRef, () => setOpen(false));
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
 
+function formatLabel(value) {
+  if (!value) return "";
+
+  return String(value)
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function FieldLabel({ children }) {
   return (
-    <div className="relative w-full md:w-48" ref={boxRef}>
-      <button
-        onClick={() => setOpen((s) => !s)}
-        className="w-full px-4 py-3 rounded-xl border border-white/15 bg-white/10 text-white
-                   flex justify-between items-center backdrop-blur focus:outline-none
-                   focus:ring-2 focus:ring-rose-300/70 cursor-pointer"
-        aria-haspopup="listbox" aria-expanded={open}
+    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
+      {children}
+    </label>
+  );
+}
+
+function SelectField({ value, onChange, children }) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-10 text-sm font-semibold text-slate-700 outline-none transition hover:border-rose-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
       >
-        <span className="truncate">{selected || label}</span>
-        <FaChevronDown />
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute w-full mt-1 max-h-60 overflow-y-auto rounded-xl border border-white/15
-                     bg-neutral-900/95 text-white z-50 backdrop-blur"
-        >
-          {options.map((opt) => (
-            <li
-              key={opt}
-              role="option"
-              aria-selected={opt === selected}
-              className={`px-4 py-2 cursor-pointer text-sm transition
-                          ${opt === selected
-                            ? "bg-rose-300 text-neutral-900"
-                            : "hover:bg-white/10 hover:text-white"}`}
-              onClick={() => { onChange(opt); setOpen(false); }}
-            >
-              {opt}
-            </li>
-          ))}
-        </ul>
-      )}
+        {children}
+      </select>
+
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
     </div>
   );
 }
 
-/* ----------------------- Profile Modal (uses /api/user/:id/profile) ----------------------- */
-function ProfileDetailsModal({ open, onClose, userId, canViewFull }) {
-  const ref = useRef(null);
-  const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState(null);
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-  useOutsideClose(ref, onClose);
-
-  useEffect(() => {
-    if (!open || !userId) return;
-    (async () => {
-      try {
-        setLoading(true);
-        const headers = {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
-        };
-        const res = await fetch(`${API}/api/user/${userId}/profile`, { headers });
-        const data = await res.json();
-        setProfile(data);
-      } catch (e) {
-        setProfile(null);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [open, userId, token]);
-
-  if (!open) return null;
-
-  const name = profile
-    ? (profile.full_name ||
-       `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() ||
-       profile.username ||
-       "User")
-    : "Profile";
-
-  const avatar = profile?.profile_photos?.[0] || "/placeholder.svg";
-
+function InputField({ type = "text", value, onChange, placeholder }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 backdrop-blur-sm p-4">
-      <div
-        ref={ref}
-        className="w-full max-w-3xl rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl overflow-hidden"
-      >
-        <div className="p-6 border-b border-white/10 flex items-center justify-between">
-          <h3 className="text-2xl font-bold text-white">Profile details</h3>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10">
-            <FaTimes className="text-white" />
-          </button>
-        </div>
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 hover:border-rose-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+    />
+  );
+}
 
-        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-          {loading ? (
-            <div className="md:col-span-3 text-white/80">Loading…</div>
-          ) : profile ? (
-            <>
-              <div className="md:col-span-1">
-                <div className="relative rounded-2xl overflow-hidden border border-white/10">
-                  <img src={avatar} alt={name} className="w-full h-64 object-cover" />
-                  {!canViewFull && (
-                    <div className="absolute inset-0 grid place-items-center bg-black/55">
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <div className="p-3 rounded-full bg-white/10 border border-white/15">
-                          <FaLock className="text-white text-lg" />
-                        </div>
-                        <p className="text-white text-sm">Upgrade membership to unlock full profile</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <h4 className="mt-4 text-xl font-semibold">{name}</h4>
-                <p className="text-white/70">{profile.profession || "—"}</p>
-                {profile.isVerified && (
-                  <span className="mt-2 inline-flex items-center gap-2 text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-full border border-emerald-400/30">
-                    <FaStar /> Verified
-                  </span>
-                )}
-              </div>
+function EmptyState({ title, message, onReset }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+        <Users className="h-8 w-8" />
+      </div>
 
-              <div className="md:col-span-2">
-                {canViewFull ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {[
-                      ["Email", profile.email_address],
-                      ["Phone", profile.phone_number],
-                      ["Gender", profile.gender],
-                      ["Age", profile.age ?? (profile.dob ? Math.floor((Date.now() - new Date(profile.dob)) / (365.25*24*3600*1000)) : "—")],
-                      ["City", profile.current_city],
-                      ["Profession", profile.profession],
-                      ["Education", profile.highest_education],
-                      ["Religion", profile.religion],
-                      ["Marital status", profile.marital_status],
-                      ["Height", profile.height],
-                      ["Mother tongue", profile.mother_tongue],
-                      ["Preferred location", profile.preferred_location],
-                      ["Annual income", profile.annual_income],
-                      ["About", profile.about_me],
-                      ["Looking for", profile.looking_for],
-                    ]
-                      .filter(([, v]) => v !== undefined && v !== null && v !== "")
-                      .map(([label, value]) => (
-                        <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-4">
-                          <p className="text-xs uppercase tracking-wider text-white/60">{label}</p>
-                          <p className="mt-1 text-white break-words">{String(value)}</p>
-                        </div>
-                      ))}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-white/80">
-                    You’re on a free plan. Upgrade to view all details.
-                  </div>
-                )}
+      <h3 className="mt-5 text-xl font-bold text-slate-900">{title}</h3>
 
-                <div className="mt-6 flex items-center gap-3">
-                  <button
-                    disabled={!canViewFull}
-                    className={`px-5 py-2 rounded-xl inline-flex items-center gap-2 font-semibold ${
-                      canViewFull
-                        ? "bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 text-neutral-900"
-                        : "bg-white/10 text-white/60 cursor-not-allowed border border-white/15"
-                    }`}
-                    title={canViewFull ? "Send a message" : "Upgrade to message"}
-                  >
-                    <FaEnvelope /> Message
-                  </button>
-                  <button onClick={onClose} className="px-5 py-2 rounded-xl border border-white/15 bg-white/10 text-white hover:bg-white/15">
-                    Close
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="md:col-span-3 text-white/80">Profile not found.</div>
-          )}
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+        {message}
+      </p>
+
+      {onReset ? (
+        <button
+          type="button"
+          onClick={onReset}
+          className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 text-sm font-bold text-white shadow-lg shadow-rose-100 transition hover:bg-rose-700"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Reset Filters
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function LockedAvatar({ verified }) {
+  return (
+    <div className="relative h-28 w-full overflow-hidden rounded-2xl border border-rose-100 bg-rose-50">
+      <div className="flex h-full items-center justify-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white bg-white text-rose-600 shadow-sm">
+          <Lock className="h-7 w-7" />
         </div>
       </div>
+
+      <div className="absolute left-3 top-3 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-700 shadow-sm">
+        Photo Locked
+      </div>
+
+      {verified ? (
+        <div className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg">
+          <BadgeCheck className="h-4 w-4" />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/* ---------------------------- Find Matches ---------------------------- */
-export default function FindMatches() {
-  const defaults = { city: "", minAge: "", maxAge: "", profession: "", education: "" };
+function MatchCard({ profile, onView }) {
+  return (
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 16, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.98 }}
+      transition={{ duration: 0.25 }}
+      className="group overflow-hidden rounded-3xl border border-white bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-rose-100"
+    >
+      <LockedAvatar verified={profile?.isVerified} />
 
-  const [filters, setFilters] = useState(defaults);
-  const [applied, setApplied] = useState(defaults);
+      <div className="mt-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-lg font-black text-slate-900">
+              {profile?.full_name || "Profile"}
+            </h3>
 
-  // data from /api/user/browse
-  const [rows, setRows] = useState([]);
-  const [total, setTotal] = useState(0);
+            {profile?.isVerified ? (
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+            ) : null}
+          </div>
 
-  // me (to gate)
-  const [canViewFull, setCanViewFull] = useState(false);
+          <p className="mt-1 text-sm font-semibold text-slate-500">
+            {profile?.age ? `${profile.age} years` : "Age hidden"} ·{" "}
+            {formatLabel(profile?.marital_status) || "Status hidden"}
+          </p>
+        </div>
 
-  // ui state
-  const [visibleCount, setVisibleCount] = useState(8);
-  const loadMoreStep = 8;
-  const [loading, setLoading] = useState(true);
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+          <Heart className="h-5 w-5" />
+        </div>
+      </div>
 
-  // modal
-  const [openUserId, setOpenUserId] = useState(null);
+      <div className="mt-4 grid grid-cols-1 gap-2">
+        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          <UserRound className="h-4 w-4 text-rose-500" />
+          <span className="truncate">
+            {formatLabel(profile?.gender) || "Gender hidden"}
+          </span>
+        </div>
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          <Heart className="h-4 w-4 text-rose-500" />
+          <span className="truncate">
+            {profile?.religion || "Religion hidden"}
+          </span>
+        </div>
 
-  // fetch /me to determine gating
-  const fetchMe = async () => {
+        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          <MapPin className="h-4 w-4 text-rose-500" />
+          <span className="truncate">
+            {[profile?.current_district, profile?.current_division]
+              .filter(Boolean)
+              .join(", ") || "Location hidden"}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          <Briefcase className="h-4 w-4 text-rose-500" />
+          <span className="truncate">
+            {profile?.profession || "Profession hidden"}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+        Profile picture and full biodata are locked for privacy.
+      </div>
+
+      <div className="mt-5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onView(profile)}
+          className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-rose-700"
+        >
+          <Eye className="h-4 w-4" />
+          View Profile
+        </button>
+
+        <button
+          type="button"
+          className="flex h-11 w-11 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 transition hover:bg-rose-600 hover:text-white"
+          title="Shortlist"
+        >
+          <Star className="h-4 w-4" />
+        </button>
+      </div>
+    </motion.article>
+  );
+}
+
+function ActiveFilterChip({ label, value, onRemove }) {
+  if (!value) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 ring-1 ring-rose-100 transition hover:bg-rose-100"
+    >
+      <span>
+        {label}: {formatLabel(value)}
+      </span>
+      <X className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+export default function FindMatch() {
+  const [profiles, setProfiles] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasNextPage, setHasNextPage] = useState(false);
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const [filters, setFilters] = useState({
+    search: "",
+    gender: "",
+    religion: "",
+    marital_status: "",
+    division: "",
+    district: "",
+    city: "",
+    profession: "",
+    education: "",
+    minAge: "",
+    maxAge: "",
+    verified: "",
+  });
+
+  const activeFilterCount = useMemo(() => {
+    return Object.entries(filters).filter(([key, value]) => {
+      if (key === "search") return false;
+      return Boolean(value);
+    }).length;
+  }, [filters]);
+
+  const updateFilter = (key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const resetFiltersOnly = () => {
+    setFilters({
+      search: "",
+      gender: "",
+      religion: "",
+      marital_status: "",
+      division: "",
+      district: "",
+      city: "",
+      profession: "",
+      education: "",
+      minAge: "",
+      maxAge: "",
+      verified: "",
+    });
+  };
+
+  const buildQueryString = (cursor = null) => {
+    const params = new URLSearchParams();
+
+    params.set("limit", "12");
+
+    if (cursor) params.set("cursor", cursor);
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== "" && value !== null && value !== undefined) {
+        params.set(key, value);
+      }
+    });
+
+    return params.toString();
+  };
+
+  const fetchUsers = async ({ append = false, cursor = null } = {}) => {
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+      setError("");
+    }
+
     try {
-      const headers = { ...(token && { Authorization: `Bearer ${token}` }) };
-      const res = await fetch(`${API}/api/user/me`, { headers });
-      if (!res.ok) throw new Error("me failed");
-      const data = await res.json();
+      const queryString = buildQueryString(cursor);
+      const url = `${API_BASE_URL}/api/user/browse?${queryString}`;
 
-      const m = data?.user?.membership_status;
-      const active = m?.active === true;
-      const allowed = active && m?.can_view_full_profiles === true;
-      setCanViewFull(Boolean(allowed));
-    } catch {
-      // if /me fails or unauthenticated → treat as free
-      setCanViewFull(false);
+      const token = getToken();
+
+      const headers = token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {};
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers,
+      });
+
+      const result = await safeJson(response);
+
+      if (!response.ok) {
+        throw new Error(
+          result.message ||
+            result.error ||
+            "Could not load users. Please try again."
+        );
+      }
+
+      const items = Array.isArray(result.items) ? result.items : [];
+
+      setProfiles((prev) => (append ? [...prev, ...items] : items));
+      setNextCursor(result.nextCursor || null);
+      setHasNextPage(Boolean(result.hasNextPage));
+    } catch (err) {
+      setError(err?.message || "Something went wrong while loading users.");
+      if (!append) setProfiles([]);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
-  // fetch list from /browse with current applied filters
-  const fetchBrowse = async () => {
-    const params = new URLSearchParams();
-    if (applied.city) params.set("city", applied.city);
-    if (applied.profession) params.set("profession", applied.profession);
-    if (applied.education) params.set("education", applied.education);
-    if (applied.minAge) params.set("minAge", applied.minAge);
-    if (applied.maxAge) params.set("maxAge", applied.maxAge);
-    params.set("limit", "60");
-    params.set("page", "1");
-
-    const url = `${API}/api/user/browse?${params.toString()}`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    const items = Array.isArray(data?.items) ? data.items : [];
-    setRows(items);
-    setTotal(Number(data?.total || items.length || 0));
-  };
-
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await Promise.all([fetchMe(), fetchBrowse()]);
-      setLoading(false);
-    })();
+    fetchUsers({ append: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applied]); // refetch when filters applied
+  }, []);
 
-  const onSearch = () => {
-    setApplied({ ...filters });
-    setVisibleCount(8);
+  const applyFilters = () => {
+    setShowMobileFilters(false);
+    fetchUsers({ append: false });
   };
 
-  const onClearAll = () => {
-    setFilters(defaults);
-    setApplied(defaults);
-    setVisibleCount(8);
+  const resetAndFetch = () => {
+    resetFiltersOnly();
+    setTimeout(() => fetchUsers({ append: false }), 0);
   };
 
-  const clearOne = (key) => {
-    const next = { ...applied, [key]: "" };
-    setApplied(next);
-    setFilters((f) => ({ ...f, [key]: "" }));
+  const handleLoadMore = () => {
+    if (!nextCursor || isLoadingMore) return;
+    fetchUsers({ append: true, cursor: nextCursor });
   };
 
-  const chips = useMemo(() => {
-    const list = [];
-    if (applied.city)       list.push({ key: "city", label: applied.city });
-    if (applied.profession) list.push({ key: "profession", label: applied.profession });
-    if (applied.education)  list.push({ key: "education", label: applied.education });
-    if (applied.minAge)     list.push({ key: "minAge", label: `Min ${applied.minAge}` });
-    if (applied.maxAge)     list.push({ key: "maxAge", label: `Max ${applied.maxAge}` });
-    return list;
-  }, [applied]);
+  const handleViewProfile = (profile) => {
+    if (!profile?._id) return;
+    window.location.href = `/profile/${profile._id}`;
+  };
 
-  const visible = rows.slice(0, visibleCount);
-  const canLoadMore = visibleCount < rows.length;
-  const showClear = hasAnyValue(applied);
+  const FilterPanel = (
+    <div className="rounded-3xl border border-white bg-white p-5 shadow-sm">
+      <div className="mb-5 flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-black text-slate-900">
+            Find Match Filters
+          </h3>
 
-  const renderLockedOverlay = () => (
-    <div className="absolute inset-0 grid place-items-center bg-black/55">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <div className="p-3 rounded-full bg-white/10 border border-white/15">
-          <FaLock className="text-white text-lg" />
+          <p className="mt-1 text-xs font-medium text-slate-500">
+            Filter all public normal users.
+          </p>
         </div>
-        <p className="text-white text-sm">Upgrade membership to unlock photos & details</p>
+
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+          <SlidersHorizontal className="h-5 w-5" />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <FieldLabel>Looking For</FieldLabel>
+          <SelectField
+            value={filters.gender}
+            onChange={(value) => updateFilter("gender", value)}
+          >
+            <option value="">Any Gender</option>
+            {genderOptions.map((gender) => (
+              <option key={gender.value} value={gender.value}>
+                {gender.label}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+
+        <div>
+          <FieldLabel>Religion</FieldLabel>
+          <SelectField
+            value={filters.religion}
+            onChange={(value) => updateFilter("religion", value)}
+          >
+            <option value="">Any Religion</option>
+            {religions.map((religion) => (
+              <option key={religion} value={religion}>
+                {religion}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+
+        <div>
+          <FieldLabel>Marital Status</FieldLabel>
+          <SelectField
+            value={filters.marital_status}
+            onChange={(value) => updateFilter("marital_status", value)}
+          >
+            <option value="">Any Status</option>
+            {maritalStatuses.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+
+        <div>
+          <FieldLabel>Division</FieldLabel>
+          <SelectField
+            value={filters.division}
+            onChange={(value) => updateFilter("division", value)}
+          >
+            <option value="">Any Division</option>
+            {divisions.map((division) => (
+              <option key={division} value={division}>
+                {division}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+
+        <div>
+          <FieldLabel>District</FieldLabel>
+          <InputField
+            value={filters.district}
+            onChange={(value) => updateFilter("district", value)}
+            placeholder="Example: Dhaka"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>City</FieldLabel>
+          <InputField
+            value={filters.city}
+            onChange={(value) => updateFilter("city", value)}
+            placeholder="Example: Mirpur"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>Profession</FieldLabel>
+          <InputField
+            value={filters.profession}
+            onChange={(value) => updateFilter("profession", value)}
+            placeholder="Example: Engineer"
+          />
+        </div>
+
+        <div>
+          <FieldLabel>Education</FieldLabel>
+          <SelectField
+            value={filters.education}
+            onChange={(value) => updateFilter("education", value)}
+          >
+            <option value="">Any Education</option>
+            {educationOptions.map((education) => (
+              <option key={education} value={education}>
+                {education}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <FieldLabel>Min Age</FieldLabel>
+            <InputField
+              type="number"
+              value={filters.minAge}
+              onChange={(value) => updateFilter("minAge", value)}
+              placeholder="18"
+            />
+          </div>
+
+          <div>
+            <FieldLabel>Max Age</FieldLabel>
+            <InputField
+              type="number"
+              value={filters.maxAge}
+              onChange={(value) => updateFilter("maxAge", value)}
+              placeholder="35"
+            />
+          </div>
+        </div>
+
+        <div>
+          <FieldLabel>Verification</FieldLabel>
+          <SelectField
+            value={filters.verified}
+            onChange={(value) => updateFilter("verified", value)}
+          >
+            <option value="">All Profiles</option>
+            <option value="true">Verified Only</option>
+            <option value="false">Unverified Only</option>
+          </SelectField>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={resetAndFetch}
+          className="h-11 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+        >
+          Reset
+        </button>
+
+        <button
+          type="button"
+          onClick={applyFilters}
+          className="h-11 rounded-xl bg-rose-600 text-sm font-bold text-white shadow-lg shadow-rose-100 transition hover:bg-rose-700"
+        >
+          Apply
+        </button>
       </div>
     </div>
   );
 
-  if (loading) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-[#0b0a12] text-white">
-        <div className="rounded-2xl border border-white/10 bg-white/5 px-6 py-4">Loading…</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-[#0b0a12] text-white">
-      {/* Hero + Filter Bar */}
-      <section
-        className="relative py-20"
-        style={{
-          backgroundImage:
-            "linear-gradient(180deg, rgba(20,14,40,0.65), rgba(12,10,24,0.9)), url('https://images.pexels.com/photos/1444442/pexels-photo-1444442.jpeg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(60%_40%_at_50%_0%,rgba(244,114,182,0.10),transparent_60%)]" />
-        <motion.div className="relative z-10 max-w-7xl mx-auto px-6 text-center" {...fadeUp(0)}>
-          <h1 className="text-4xl md:text-5xl font-extrabold mb-4 tracking-tight">
-            Find Your{" "}
-            <span className="bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 bg-clip-text text-transparent">
-              Perfect Match
-            </span>
-          </h1>
-          <p className="mb-10 text-white/80 max-w-2xl mx-auto">
-            Search verified profiles with premium filters and elegant cards.
-          </p>
+    <div className="min-h-screen bg-[#f8f3ef] pt-[120px] text-slate-800">
+      <div className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+        <div className="mb-6 rounded-3xl border border-white bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                Find Match
+              </h1>
 
-          {/* Filter Bar */}
-          <div className="flex flex-col md:flex-row gap-4 justify-center items-center flex-wrap bg-white/5 border border-white/10 p-6 rounded-2xl backdrop-blur">
-            <Dropdown label="City"       options={["Dhaka","Chittagong","Sylhet","Khulna","Barishal"]} selected={filters.city}       onChange={(v) => setFilters({ ...filters, city: v })} />
-            <Dropdown label="Profession" options={["Software Engineer", "Doctor", "Engineer", "Business Analyst", "Teacher"]} selected={filters.profession} onChange={(v) => setFilters({ ...filters, profession: v })} />
-            <Dropdown label="Education"  options={["Bachelors","Masters","HSC","PhD"]} selected={filters.education}  onChange={(v) => setFilters({ ...filters, education: v })} />
-            <input
-              type="number" placeholder="Min Age"
-              className="px-4 py-3 rounded-xl w-full md:w-36 border border-white/15 bg-white/10 text-white
-                         placeholder-white/60 focus:ring-2 focus:ring-rose-300/70 focus:outline-none backdrop-blur"
-              value={filters.minAge}
-              onChange={(e) => setFilters({ ...filters, minAge: e.target.value })}
-            />
-            <input
-              type="number" placeholder="Max Age"
-              className="px-4 py-3 rounded-xl w-full md:w-36 border border-white/15 bg-white/10 text-white
-                         placeholder-white/60 focus:ring-2 focus:ring-rose-300/70 focus:outline-none backdrop-blur"
-              value={filters.maxAge}
-              onChange={(e) => setFilters({ ...filters, maxAge: e.target.value })}
-            />
-            <div className="flex gap-3 w-full md:w-auto">
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                Showing all public normal users. Use filters to find a better
+                match.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative min-w-0 sm:w-80">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                <input
+                  type="text"
+                  value={filters.search}
+                  onChange={(e) => updateFilter("search", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") fetchUsers({ append: false });
+                  }}
+                  placeholder="Search name, city, profession..."
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 hover:border-rose-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+                />
+              </div>
+
               <button
-                onClick={onSearch}
-                className="flex-1 md:flex-none bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 text-neutral-900 font-semibold px-6 py-3 rounded-xl
-                           hover:shadow-lg shadow-rose-900/20 transition cursor-pointer"
+                type="button"
+                onClick={() => setShowMobileFilters(true)}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 lg:hidden"
               >
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 ? (
+                  <span className="rounded-full bg-rose-600 px-2 py-0.5 text-xs text-white">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fetchUsers({ append: false })}
+                disabled={isLoading}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
                 Search
               </button>
-              {showClear && (
-                <button
-                  onClick={onClearAll}
-                  className="flex-1 md:flex-none border border-white/15 bg-white/10 text-white px-6 py-3 rounded-xl
-                             hover:bg-white/15 transition cursor-pointer"
-                >
-                  Clear
-                </button>
-              )}
             </div>
           </div>
 
-          {/* Active Chips */}
-          {hasAnyValue(applied) && (
-            <div className="mt-4 flex flex-wrap gap-2 justify-center">
-              {[
-                applied.city && { key: "city", label: applied.city },
-                applied.profession && { key: "profession", label: applied.profession },
-                applied.education && { key: "education", label: applied.education },
-                applied.minAge && { key: "minAge", label: `Min ${applied.minAge}` },
-                applied.maxAge && { key: "maxAge", label: `Max ${applied.maxAge}` },
-              ].filter(Boolean).map((c) => (
-                <span key={c.key} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm">
-                  {c.label}
-                  <button
-                    className="rounded-full bg-white/10 hover:bg-white/20 p-1 cursor-pointer"
-                    onClick={() => clearOne(c.key)}
-                    aria-label={`Remove ${c.label}`}
-                  >
-                    <FaTimes />
-                  </button>
-                </span>
-              ))}
-              <button onClick={onClearAll} className="ml-2 text-sm text-white/70 underline underline-offset-4 hover:text-white">
-                Clear all
-              </button>
+          {activeFilterCount > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <ActiveFilterChip
+                label="Gender"
+                value={filters.gender}
+                onRemove={() => updateFilter("gender", "")}
+              />
+
+              <ActiveFilterChip
+                label="Religion"
+                value={filters.religion}
+                onRemove={() => updateFilter("religion", "")}
+              />
+
+              <ActiveFilterChip
+                label="Marital"
+                value={filters.marital_status}
+                onRemove={() => updateFilter("marital_status", "")}
+              />
+
+              <ActiveFilterChip
+                label="Division"
+                value={filters.division}
+                onRemove={() => updateFilter("division", "")}
+              />
+
+              <ActiveFilterChip
+                label="District"
+                value={filters.district}
+                onRemove={() => updateFilter("district", "")}
+              />
+
+              <ActiveFilterChip
+                label="City"
+                value={filters.city}
+                onRemove={() => updateFilter("city", "")}
+              />
+
+              <ActiveFilterChip
+                label="Profession"
+                value={filters.profession}
+                onRemove={() => updateFilter("profession", "")}
+              />
+
+              <ActiveFilterChip
+                label="Education"
+                value={filters.education}
+                onRemove={() => updateFilter("education", "")}
+              />
+
+              <ActiveFilterChip
+                label="Min Age"
+                value={filters.minAge}
+                onRemove={() => updateFilter("minAge", "")}
+              />
+
+              <ActiveFilterChip
+                label="Max Age"
+                value={filters.maxAge}
+                onRemove={() => updateFilter("maxAge", "")}
+              />
+
+              <ActiveFilterChip
+                label="Verified"
+                value={
+                  filters.verified === "true"
+                    ? "Verified Only"
+                    : filters.verified === "false"
+                    ? "Unverified Only"
+                    : ""
+                }
+                onRemove={() => updateFilter("verified", "")}
+              />
             </div>
-          )}
-        </motion.div>
-      </section>
-
-      {/* Profiles */}
-      <section className="max-w-7xl mx-auto px-6 py-16">
-        <motion.h2 className="text-3xl md:text-4xl font-extrabold mb-10 text-center" {...fadeUp(0.05)}>
-          Matching Profiles <span className="text-white/60">({total})</span>
-        </motion.h2>
-
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {visible.length === 0 ? (
-            <p className="text-center text-white/60 col-span-full">No profiles found. Try adjusting your filters.</p>
-          ) : (
-            visible.map((u, idx) => {
-              const name = (u.full_name || `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || u.username || "User");
-              const avatar = Array.isArray(u.profile_photos) && u.profile_photos.length ? u.profile_photos[0] : "/placeholder.svg";
-              const score = typeof u.score === "number" ? u.score : 80;
-              const deg = score * 3.6;
-              const conic = `conic-gradient(
-                  from 0deg,
-                  #f0abfc 0deg,
-                  #f9a8d4 ${deg / 2}deg,
-                  #fecdd3 ${deg}deg,
-                  rgba(255,255,255,0.12) ${deg}deg
-                )`;
-
-              return (
-                <motion.article
-                  key={u._id || idx}
-                  {...fadeUp(0.06 + idx * 0.02)}
-                  className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur
-                             px-6 pt-8 pb-6 hover:border-rose-300/60 hover:shadow-[0_12px_30px_-12px_rgba(244,114,182,0.45)] transition relative"
-                >
-                  {/* Avatar with compatibility ring */}
-                  <div className="relative w-28 h-28 mx-auto mb-6">
-                    <div className="absolute inset-0 rounded-full" style={{ background: conic }} />
-                    <div className="absolute inset-[6px] rounded-full overflow-hidden bg-[#0f0e1a] border-2 border-white/10">
-                      <img src={avatar} alt={name} className="w-full h-full object-cover" />
-                      {!canViewFull && (
-                        <div className="absolute inset-0 grid place-items-center bg-black/55">
-                          <div className="flex flex-col items-center gap-2 text-center">
-                            <div className="p-3 rounded-full bg-white/10 border border-white/15">
-                              <FaLock className="text-white text-lg" />
-                            </div>
-                            <p className="text-white text-xs">Upgrade to unlock photos</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="absolute -top-2 -right-2 text-[11px] bg-white/10 border border-white/15 backdrop-blur px-2 py-0.5 rounded-full">
-                      {score}%
-                    </div>
-                    {u.isVerified && (
-                      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <FaStar /> Verified
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Name */}
-                  <h3 className="text-lg font-semibold text-center">{name}</h3>
-
-                  {/* Age */}
-                  <p className="text-sm text-white/70 flex items-center gap-2 mt-1 justify-center">
-                    {(u.gender ?? "").toLowerCase() === "male" ? <FaMale /> : <FaFemale />} {u.age ?? "—"} yrs
-                  </p>
-
-                  {/* Basics */}
-                  <div className="mt-4 space-y-2 text-sm text-white/80 text-left relative">
-                    <p className="flex items-center gap-2">
-                      <FaMapMarkerAlt className="text-rose-300" /> {u.current_city ?? "—"}
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <FaBriefcase className="text-rose-300" /> {u.profession ?? "—"}
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <FaGraduationCap className="text-rose-300" /> {u.highest_education ?? "—"}
-                    </p>
-                  </div>
-
-                  {/* CTA */}
-                  <div className="mt-6 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setOpenUserId(u._id)}
-                      className={`w-full font-semibold px-4 py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-2
-                        ${canViewFull
-                          ? "bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 text-neutral-900 hover:shadow-md shadow-rose-900/20"
-                          : "bg-white/10 text-white/90 border border-white/15"}`}
-                      title={canViewFull ? "View full profile" : "View limited profile"}
-                    >
-                      <FaHeart /> View
-                    </button>
-
-                    <button
-                      onClick={() => setOpenUserId(u._id)}
-                      className={`w-full font-semibold px-4 py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-2
-                        ${canViewFull
-                          ? "border border-white/15 bg-white/10 hover:bg-white/15"
-                          : "bg-white/10 text-white/70 border border-white/15"}`}
-                      title={canViewFull ? "Message" : "Upgrade to message"}
-                    >
-                      <FaEnvelope /> Message
-                    </button>
-                  </div>
-                </motion.article>
-              );
-            })
-          )}
+          ) : null}
         </div>
 
-        {/* See more */}
-        {canLoadMore && (
-          <div className="mt-10 flex flex-col items-center gap-3">
-            <button
-              onClick={() => setVisibleCount((c) => c + loadMoreStep)}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-fuchsia-300 via-pink-300 to-rose-300 text-neutral-900 font-semibold
-                         hover:shadow-md shadow-rose-900/20 transition cursor-pointer"
-            >
-              See more
-            </button>
-            <span className="text-sm text-white/60">
-              Showing {visible.length} of {rows.length} (Total {total})
-            </span>
-          </div>
-        )}
-      </section>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
+          <aside className="hidden lg:block lg:sticky lg:top-[120px] lg:h-fit">
+            {FilterPanel}
+          </aside>
 
-      {/* Full profile modal (uses /api/user/:id/profile; gated by /me) */}
-      <ProfileDetailsModal
-        open={!!openUserId}
-        onClose={() => setOpenUserId(null)}
-        userId={openUserId}
-        canViewFull={canViewFull}
-      />
+          <main className="min-w-0">
+            {error ? (
+              <div className="mb-6 rounded-3xl border border-rose-100 bg-rose-50 p-5 text-rose-700">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+
+                  <div>
+                    <h3 className="font-black">Could not load users</h3>
+
+                    <p className="mt-1 text-sm font-medium">{error}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {isLoading ? (
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="rounded-3xl border border-white bg-white p-4 shadow-sm"
+                  >
+                    <div className="h-28 animate-pulse rounded-2xl bg-slate-100" />
+
+                    <div className="mt-4 h-5 w-2/3 animate-pulse rounded bg-slate-100" />
+
+                    <div className="mt-3 h-4 w-1/2 animate-pulse rounded bg-slate-100" />
+
+                    <div className="mt-5 space-y-2">
+                      <div className="h-10 animate-pulse rounded-2xl bg-slate-100" />
+                      <div className="h-10 animate-pulse rounded-2xl bg-slate-100" />
+                      <div className="h-10 animate-pulse rounded-2xl bg-slate-100" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : profiles.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                  <AnimatePresence>
+                    {profiles.map((profile) => (
+                      <MatchCard
+                        key={profile._id}
+                        profile={profile}
+                        onView={handleViewProfile}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+
+                <div className="mt-8 flex justify-center pb-6">
+                  <button
+                    type="button"
+                    onClick={handleLoadMore}
+                    disabled={!hasNextPage || isLoadingMore}
+                    className={`inline-flex h-12 min-w-44 items-center justify-center gap-2 rounded-2xl px-6 text-sm font-black transition ${
+                      hasNextPage
+                        ? "bg-rose-600 text-white shadow-lg shadow-rose-100 hover:bg-rose-700"
+                        : "cursor-not-allowed bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : hasNextPage ? (
+                      <>
+                        <Users className="h-4 w-4" />
+                        See More
+                      </>
+                    ) : (
+                      "No More Profiles"
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <EmptyState
+                title="No users found"
+                message="By default this page shows all public normal users. Try resetting filters or check if users are approved/pending review from the admin panel."
+                onReset={resetAndFetch}
+              />
+            )}
+          </main>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showMobileFilters ? (
+          <motion.div
+            className="fixed inset-0 z-50 bg-slate-950/50 p-4 backdrop-blur-sm lg:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ y: 30, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 30, opacity: 0, scale: 0.98 }}
+              className="ml-auto h-full max-w-md overflow-y-auto rounded-3xl bg-[#f8f3ef] p-4"
+            >
+              <div className="mb-4 flex items-center justify-between rounded-3xl bg-white p-4">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">
+                    Filters
+                  </h3>
+
+                  <p className="text-sm font-medium text-slate-500">
+                    Refine public user list
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowMobileFilters(false)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {FilterPanel}
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
