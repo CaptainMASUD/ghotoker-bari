@@ -10,7 +10,7 @@ const getSavedAuthUser = () => {
 
     const user = userString ? JSON.parse(userString) : null;
 
-    if (!token) return null;
+    if (!token || !user) return null;
 
     return {
       token,
@@ -19,6 +19,25 @@ const getSavedAuthUser = () => {
   } catch {
     return null;
   }
+};
+
+const saveAuthUser = ({ token, user, rememberMe = true }) => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("user");
+
+  const storage = rememberMe ? localStorage : sessionStorage;
+
+  storage.setItem("token", token);
+  storage.setItem("user", JSON.stringify(user));
+};
+
+const clearAuthUser = () => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("user");
 };
 
 const initialState = {
@@ -37,9 +56,22 @@ const userSlice = createSlice({
     },
 
     signInSuccess: (state, action) => {
-      state.currentUser = action.payload;
+      const { token, user, rememberMe = true } = action.payload;
+
+      const authUser = {
+        token,
+        user,
+      };
+
+      state.currentUser = authUser;
       state.loading = false;
       state.error = null;
+
+      saveAuthUser({
+        token,
+        user,
+        rememberMe,
+      });
     },
 
     signInError: (state, action) => {
@@ -52,10 +84,7 @@ const userSlice = createSlice({
       state.error = null;
       state.loading = false;
 
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      sessionStorage.removeItem("token");
-      sessionStorage.removeItem("user");
+      clearAuthUser();
     },
   },
 });

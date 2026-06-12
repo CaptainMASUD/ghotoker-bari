@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDispatch } from "react-redux";
+import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Mail,
@@ -23,6 +24,8 @@ import {
 } from "../../Redux/UserSlice/UserSlice";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+const ADMIN_ROLES = ["admin", "moderator", "superadmin"];
 
 async function safeJson(response) {
   try {
@@ -195,6 +198,7 @@ function MessageModal({ modal, onClose }) {
 
 export default function Login() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     email_address: "",
@@ -244,7 +248,7 @@ export default function Login() {
     }));
 
     if (redirectTo) {
-      window.location.href = redirectTo;
+      navigate(redirectTo, { replace: true });
     }
   };
 
@@ -266,13 +270,30 @@ export default function Login() {
   };
 
   const getRedirectPath = (user) => {
-    if (!user) return "/";
+    const role = String(user?.role || "").toLowerCase();
 
-    if (user.role === "superadmin" || user.role === "moderator") {
+    if (ADMIN_ROLES.includes(role)) {
       return "/admin/dashboard";
     }
 
     return "/profile";
+  };
+
+  const getLoginErrorTitle = (message) => {
+    const lowerMessage = String(message || "").toLowerCase();
+
+    if (lowerMessage.includes("not found")) return "Account Not Found";
+    if (lowerMessage.includes("invalid")) return "Invalid Login";
+    if (
+      lowerMessage.includes("suspended") ||
+      lowerMessage.includes("not available")
+    ) {
+      return "Account Restricted";
+    }
+    if (lowerMessage.includes("not verified")) return "Admin Not Verified";
+    if (lowerMessage.includes("not active")) return "Admin Not Active";
+
+    return "Login Failed";
   };
 
   const handleSubmit = async (event) => {
@@ -305,32 +326,27 @@ export default function Login() {
 
         dispatch(signInError(message));
 
-        const isNotFound = message.toLowerCase().includes("not found");
-        const isInvalid = message.toLowerCase().includes("invalid");
-        const isSuspended =
-          message.toLowerCase().includes("suspended") ||
-          message.toLowerCase().includes("not available");
-        const isAdminUnverified = message.toLowerCase().includes("not verified");
+        const lowerMessage = message.toLowerCase();
+        const isWarning =
+          lowerMessage.includes("suspended") ||
+          lowerMessage.includes("not available") ||
+          lowerMessage.includes("not verified") ||
+          lowerMessage.includes("not active");
 
         showModal({
-          type: isSuspended || isAdminUnverified ? "warning" : "error",
-          title: isNotFound
-            ? "Account Not Found"
-            : isInvalid
-            ? "Invalid Login"
-            : isSuspended
-            ? "Account Restricted"
-            : isAdminUnverified
-            ? "Admin Not Verified"
-            : "Login Failed",
-          message: isNotFound
-            ? "No account was found with this email address. Please register first."
-            : isInvalid
-            ? "Your email or password is incorrect. Please try again."
-            : message,
+          type: isWarning ? "warning" : "error",
+          title: getLoginErrorTitle(message),
+          message:
+            lowerMessage.includes("not found")
+              ? "No account was found with this email address. Please register first."
+              : lowerMessage.includes("invalid")
+              ? "Your email or password is incorrect. Please try again."
+              : message,
           details: result.error || "",
-          buttonText: isNotFound ? "Go to Register" : "Try Again",
-          redirectTo: isNotFound ? "/register" : "",
+          buttonText: lowerMessage.includes("not found")
+            ? "Go to Register"
+            : "Try Again",
+          redirectTo: lowerMessage.includes("not found") ? "/register" : "",
         });
 
         return;
@@ -347,27 +363,20 @@ export default function Login() {
           title: "Login Response Incomplete",
           message,
           details:
-            "Please check your login controller response. It should return { token, user }.",
+            "Your backend login controller should return { token, user }.",
           buttonText: "Okay",
         });
 
         return;
       }
 
-      const reduxUser = {
-        token: result.token,
-        user: result.user,
-      };
-
-      if (formData.rememberMe) {
-        localStorage.setItem("token", result.token);
-        localStorage.setItem("user", JSON.stringify(result.user));
-      } else {
-        sessionStorage.setItem("token", result.token);
-        sessionStorage.setItem("user", JSON.stringify(result.user));
-      }
-
-      dispatch(signInSuccess(reduxUser));
+      dispatch(
+        signInSuccess({
+          token: result.token,
+          user: result.user,
+          rememberMe: formData.rememberMe,
+        })
+      );
 
       const redirectTo = getRedirectPath(result.user);
 
@@ -422,9 +431,7 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="mt-5 max-w-lg">
-             
-
+            <div className="mt-10 max-w-lg">
               <h2 className="text-4xl font-bold leading-tight tracking-tight text-slate-900">
                 Find your life partner with verified profiles.
               </h2>
@@ -464,6 +471,7 @@ export default function Login() {
                   alt="ঘটকদের বাড়ি"
                   className="h-12 w-12 rounded-2xl object-contain"
                 />
+
                 <div>
                   <h1 className="text-xl font-bold text-slate-900">
                     ঘটকদের বাড়ি
@@ -521,12 +529,12 @@ export default function Login() {
                     Remember me
                   </label>
 
-                  <a
-                    href="/forgot-password"
+                  <Link
+                    to="/forgot-password"
                     className="text-sm font-semibold text-rose-600 hover:text-rose-700 hover:underline"
                   >
                     Forgot password?
-                  </a>
+                  </Link>
                 </div>
 
                 <button
@@ -542,12 +550,12 @@ export default function Login() {
               <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 <p className="text-center text-sm text-slate-600">
                   Don&apos;t have an account?{" "}
-                  <a
-                    href="/register"
+                  <Link
+                    to="/register"
                     className="font-bold text-rose-600 hover:text-rose-700 hover:underline"
                   >
                     Create account
-                  </a>
+                  </Link>
                 </p>
               </div>
 

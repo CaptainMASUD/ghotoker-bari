@@ -6,6 +6,7 @@ import { logout } from "../../Redux/UserSlice/UserSlice";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
+  Crown,
   LayoutDashboard,
   LogOut,
   ShieldCheck,
@@ -16,12 +17,18 @@ import logo from "../../Logo/logo.svg";
 const navLinks = [
   { to: "/", label: "Home" },
   { to: "/find-matches", label: "Find Matches" },
+  {
+    to: "/plans",
+    label: "Plans",
+    icon: Crown,
+    iconClassName: "text-amber-400",
+  },
   { to: "/success-stories", label: "Success Stories" },
   { to: "/contact", label: "Contact" },
 ];
 
 const desktopLinkBase =
-  "relative inline-flex h-10 items-center rounded-full px-4 text-sm font-semibold transition-all duration-200";
+  "relative inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition-all duration-200";
 
 const desktopLinkActive = "bg-rose-600 text-white shadow-sm";
 
@@ -29,7 +36,7 @@ const desktopLinkInactive =
   "text-slate-600 hover:bg-rose-50 hover:text-rose-700";
 
 const mobileLinkBase =
-  "flex h-12 items-center rounded-2xl px-4 text-sm font-semibold transition-all duration-200";
+  "flex h-12 items-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-all duration-200";
 
 const mobileLinkActive = "bg-rose-600 text-white shadow-sm";
 
@@ -138,7 +145,6 @@ export default function Navbar() {
   }, []);
 
   // ✅ Every time route/component changes, show the new route from the top.
-  // This is better than adding scroll logic on every single Link click.
   useEffect(() => {
     setIsOpen(false);
     setShowProfileMenu(false);
@@ -231,6 +237,8 @@ export default function Navbar() {
               key={item.to}
               to={item.to}
               label={item.label}
+              icon={item.icon}
+              iconClassName={item.iconClassName}
               onNavigate={closeMenus}
             />
           ))}
@@ -398,6 +406,8 @@ export default function Navbar() {
                   key={item.to}
                   to={item.to}
                   label={item.label}
+                  icon={item.icon}
+                  iconClassName={item.iconClassName}
                   onNavigate={closeMenus}
                 />
               ))}
@@ -484,7 +494,7 @@ export default function Navbar() {
   );
 }
 
-function DesktopNavItem({ to, label, onNavigate }) {
+function DesktopNavItem({ to, label, icon: Icon, iconClassName = "", onNavigate }) {
   return (
     <NavLink
       to={to}
@@ -496,12 +506,13 @@ function DesktopNavItem({ to, label, onNavigate }) {
         }`
       }
     >
+      {Icon ? <Icon className={`h-4 w-4 ${iconClassName}`} /> : null}
       {label}
     </NavLink>
   );
 }
 
-function MobileNavItem({ to, label, onNavigate }) {
+function MobileNavItem({ to, label, icon: Icon, iconClassName = "", onNavigate }) {
   return (
     <NavLink
       to={to}
@@ -511,6 +522,7 @@ function MobileNavItem({ to, label, onNavigate }) {
         `${mobileLinkBase} ${isActive ? mobileLinkActive : mobileLinkInactive}`
       }
     >
+      {Icon ? <Icon className={`h-4 w-4 ${iconClassName}`} /> : null}
       {label}
     </NavLink>
   );
