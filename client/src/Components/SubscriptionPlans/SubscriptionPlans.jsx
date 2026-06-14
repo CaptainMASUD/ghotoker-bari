@@ -68,6 +68,145 @@ function getLoggedInUser(currentUser) {
   return currentUser?.user || currentUser?.data || currentUser || null;
 }
 
+function extractUserFromResponse(result) {
+  return (
+    result?.user ||
+    result?.data?.user ||
+    result?.data ||
+    result?.profile ||
+    result?.me ||
+    null
+  );
+}
+
+function getPlanId(plan) {
+  return plan?._id || plan?.id || "";
+}
+
+function getMembershipIdFromUser(user) {
+  const membership = user?.membership;
+
+  if (!membership) return "";
+
+  if (typeof membership === "object") {
+    return membership?._id || membership?.id || "";
+  }
+
+  return membership;
+}
+
+function getMembershipExpiry(user) {
+  return (
+    user?.membership_expiry ||
+    user?.membershipExpiry ||
+    user?.membership?.membership_expiry ||
+    user?.membership?.membershipExpiry ||
+    null
+  );
+}
+
+function isMembershipDateActive(user) {
+  const expiry = getMembershipExpiry(user);
+
+  if (!expiry) return true;
+
+  const expiryDate = new Date(expiry);
+
+  if (Number.isNaN(expiryDate.getTime())) return true;
+
+  return expiryDate.getTime() >= Date.now();
+}
+
+function hasActiveMembership(user) {
+  const membershipId = getMembershipIdFromUser(user);
+
+  if (!membershipId) return false;
+
+  const status = String(
+    user?.membership_status || user?.membershipStatus || ""
+  ).toLowerCase();
+
+  if (["expired", "cancelled", "canceled", "inactive"].includes(status)) {
+    return false;
+  }
+
+  return isMembershipDateActive(user);
+}
+
+function isSamePlan(plan, membershipId) {
+  return String(getPlanId(plan) || "") === String(membershipId || "");
+}
+
+function isPendingPaymentForPlan(payment, plan) {
+  const paymentPlanId =
+    typeof payment?.membership === "object"
+      ? payment?.membership?._id || payment?.membership?.id
+      : payment?.membership;
+
+  return (
+    String(payment?.status || "").toLowerCase() === "pending" &&
+    String(paymentPlanId || "") === String(getPlanId(plan) || "")
+  );
+}
+
+async function fetchWithAuth(url, token) {
+  const response = await fetch(url, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const result = await safeJson(response);
+
+  return { response, result };
+}
+
+async function fetchFreshUser(token) {
+  if (!token) return null;
+
+  const endpoints = [
+    `${API_BASE_URL}/api/users/me`,
+    `${API_BASE_URL}/api/user/me`,
+    `${API_BASE_URL}/api/auth/me`,
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const { response, result } = await fetchWithAuth(endpoint, token);
+
+      if (response.ok) {
+        return extractUserFromResponse(result);
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return null;
+      }
+    } catch {
+      // Try the next possible route. Different projects mount /me differently.
+    }
+  }
+
+  return null;
+}
+
+async function fetchMyMembershipPayments(token) {
+  if (!token) return [];
+
+  try {
+    const { response, result } = await fetchWithAuth(
+      `${API_BASE_URL}/api/membership-payments/my?limit=100`,
+      token
+    );
+
+    if (!response.ok) return [];
+
+    return Array.isArray(result.items) ? result.items : [];
+  } catch {
+    return [];
+  }
+}
+
 function formatPrice(plan) {
   const price = Number(plan?.price || 0);
 
@@ -624,24 +763,39 @@ function PurchaseModal({
   );
 }
 
-function PlanCard({ plan, isCurrentPlan, onPurchase }) {
+function PlanCard({ plan, isCurrentPlan, isPendingPlan, onPurchase }) {
   const features = buildFeatureList(plan.features || {});
   const isFree =
     plan.is_free || plan.slug === "free" || Number(plan.price || 0) <= 0;
-  const isPopular = !isFree && Number(plan.sort_order || 0) === 1;
+  const isPopular =
+    !isFree && !isCurrentPlan && !isPendingPlan && Number(plan.sort_order || 0) === 1;
+
+  const isLockedState = isFree || isCurrentPlan || isPendingPlan;
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 18 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      className={`relative overflow-hidden rounded-[2rem] border bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
-        isPopular
-          ? "border-rose-200 shadow-rose-100"
-          : "border-slate-100"
+      className={`relative overflow-hidden rounded-[2rem] border bg-white p-6 shadow-sm transition ${
+        isCurrentPlan
+          ? "border-emerald-200 shadow-emerald-100"
+          : isPendingPlan
+          ? "border-amber-200 shadow-amber-100"
+          : isPopular
+          ? "border-rose-200 shadow-rose-100 hover:-translate-y-1 hover:shadow-xl"
+          : "border-slate-100 hover:-translate-y-1 hover:shadow-xl"
       }`}
     >
-      {isPopular ? (
+      {isCurrentPlan ? (
+        <div className="absolute right-5 top-5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
+          Current
+        </div>
+      ) : isPendingPlan ? (
+        <div className="absolute right-5 top-5 rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white">
+          In Progress
+        </div>
+      ) : isPopular ? (
         <div className="absolute right-5 top-5 rounded-full bg-rose-600 px-3 py-1 text-xs font-bold text-white">
           Popular
         </div>
@@ -718,11 +872,13 @@ function PlanCard({ plan, isCurrentPlan, onPurchase }) {
 
       <button
         type="button"
-        disabled={isFree || isCurrentPlan}
+        disabled={isLockedState}
         onClick={() => onPurchase(plan)}
         className={`mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 text-sm font-semibold transition ${
           isCurrentPlan
             ? "cursor-not-allowed bg-emerald-50 text-emerald-700"
+            : isPendingPlan
+            ? "cursor-not-allowed bg-amber-50 text-amber-700"
             : isFree
             ? "cursor-not-allowed bg-slate-100 text-slate-500"
             : "bg-rose-600 text-white shadow-lg shadow-rose-100 hover:bg-rose-700"
@@ -732,6 +888,11 @@ function PlanCard({ plan, isCurrentPlan, onPurchase }) {
           <>
             <CheckCircle className="h-4 w-4" />
             Current Plan
+          </>
+        ) : isPendingPlan ? (
+          <>
+            <Loader2 className="h-4 w-4" />
+            Request In Progress
           </>
         ) : isFree ? (
           <>
@@ -757,6 +918,8 @@ export default function SubscriptionPlans() {
 
   const [plans, setPlans] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [freshUser, setFreshUser] = useState(null);
+  const [myPayments, setMyPayments] = useState([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -780,10 +943,10 @@ export default function SubscriptionPlans() {
     redirectTo: "",
   });
 
-  const currentMembershipId =
-    typeof loggedInUser?.membership === "object"
-      ? loggedInUser?.membership?._id
-      : loggedInUser?.membership;
+  const authUser = freshUser || loggedInUser;
+
+  const currentMembershipId = getMembershipIdFromUser(authUser);
+  const userHasActiveMembership = hasActiveMembership(authUser);
 
   const activePlans = useMemo(() => {
     return [...plans].sort((a, b) => {
@@ -796,6 +959,14 @@ export default function SubscriptionPlans() {
       return priceA - priceB;
     });
   }, [plans]);
+
+  const isCurrentActivePlan = (plan) => {
+    return userHasActiveMembership && isSamePlan(plan, currentMembershipId);
+  };
+
+  const isPlanPaymentPending = (plan) => {
+    return myPayments.some((payment) => isPendingPaymentForPlan(payment, plan));
+  };
 
   const showModal = (payload) => {
     setModal({
@@ -830,10 +1001,13 @@ export default function SubscriptionPlans() {
     }
 
     try {
-      const [plansResponse, methodsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/memberships`),
-        fetch(`${API_BASE_URL}/api/membership-payments/methods`),
-      ]);
+      const [plansResponse, methodsResponse, freshProfile, payments] =
+        await Promise.all([
+          fetch(`${API_BASE_URL}/api/memberships`),
+          fetch(`${API_BASE_URL}/api/membership-payments/methods`),
+          fetchFreshUser(token),
+          fetchMyMembershipPayments(token),
+        ]);
 
       const [plansResult, methodsResult] = await Promise.all([
         safeJson(plansResponse),
@@ -856,6 +1030,8 @@ export default function SubscriptionPlans() {
       setPaymentMethods(
         Array.isArray(methodsResult.items) ? methodsResult.items : []
       );
+      setFreshUser(freshProfile);
+      setMyPayments(payments);
     } catch (error) {
       showModal({
         type: "error",
@@ -873,7 +1049,8 @@ export default function SubscriptionPlans() {
 
   useEffect(() => {
     fetchData(false);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   const openPurchaseModal = (plan) => {
     if (!token) {
@@ -883,6 +1060,28 @@ export default function SubscriptionPlans() {
         message: "Please login first to purchase a membership plan.",
         buttonText: "Go to Login",
         redirectTo: "/login",
+      });
+      return;
+    }
+
+    if (isCurrentActivePlan(plan)) {
+      showModal({
+        type: "success",
+        title: "Already Active",
+        message: `${plan.name} is already your current membership plan.`,
+        buttonText: "Okay",
+      });
+      return;
+    }
+
+    if (isPlanPaymentPending(plan)) {
+      showModal({
+        type: "warning",
+        title: "Request In Progress",
+        message:
+          "You already submitted a payment request for this plan. Please wait for admin approval.",
+        buttonText: "View My Payments",
+        redirectTo: "/my-membership-payments",
       });
       return;
     }
@@ -995,6 +1194,7 @@ export default function SubscriptionPlans() {
       }
 
       closePurchaseModal();
+      await fetchData(true);
 
       showModal({
         type: "success",
@@ -1043,42 +1243,7 @@ export default function SubscriptionPlans() {
 
       <div className="min-h-screen bg-[#f8f3ef] px-4 pb-12 pt-28 text-slate-800 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-7 flex flex-col gap-4 rounded-[2rem] border border-white bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
-                <Crown className="h-6 w-6" />
-              </div>
-
-              <div>
-                <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-                  Membership Plans
-                </h1>
-             
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => fetchData(true)}
-                disabled={isRefreshing}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-rose-200 hover:text-rose-600 disabled:opacity-60"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
-                />
-                Refresh
-              </button>
-
-              <Link
-                to="/my-membership-payments"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                My Payments
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
+          
 
           {isLoading ? (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -1106,9 +1271,8 @@ export default function SubscriptionPlans() {
                 <PlanCard
                   key={plan._id}
                   plan={plan}
-                  isCurrentPlan={
-                    String(currentMembershipId || "") === String(plan._id)
-                  }
+                  isCurrentPlan={isCurrentActivePlan(plan)}
+                  isPendingPlan={isPlanPaymentPending(plan)}
                   onPurchase={openPurchaseModal}
                 />
               ))}

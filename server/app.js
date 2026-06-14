@@ -1,13 +1,13 @@
-// app.js
 import express from "express";
 import cors from "cors";
-import http from "http";
-
 
 import adminRoutes from "./routes/admin.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import membershipRoutes from "./routes/membership.routes.js";
 import contactRoutes from "./routes/contact.route.js";
+import membershipPaymentRoutes from "./routes/membershipPayment.route.js";
+import matrimonyActionRoutes from "./routes/matrimonyAction.route.js";
+import adminOverviewRoutes from "./routes/adminOverview.routes.js";
 
 const app = express();
 
@@ -22,37 +22,42 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    // ⬇️ omit methods & allowedHeaders to use defaults
-    // methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    // allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
-// Preflight for all routes (also using defaults)
 app.options("*", cors());
 
 app.use(express.json());
 
-// REST routes
+/* =====================================================
+   REST ROUTES
+===================================================== */
 
+app.use("/api/admin/overview", adminOverviewRoutes);
+app.use("/api/membership-payments", membershipPaymentRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/memberships", membershipRoutes);
 app.use("/api/contact", contactRoutes);
+app.use("/api/matrimony-actions", matrimonyActionRoutes);
 
-// Error handler
+/* =====================================================
+   ERROR HANDLER
+===================================================== */
+
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const message = err.message || "Internal server error";
-  res.status(statusCode).json({ success: false, statusCode, message });
+
+  res.status(statusCode).json({
+    success: false,
+    statusCode,
+    message,
+  });
 });
-
-/* ----------------------- HTTP server + Socket.IO ----------------------- */
-
-
-
 
 export { app };

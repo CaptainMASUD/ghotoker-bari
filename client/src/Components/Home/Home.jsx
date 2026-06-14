@@ -12,7 +12,6 @@ import {
   Crown,
   CheckCircle,
   PhoneCall,
-  MessageCircle,
   CalendarHeart,
   UserCheck,
   BadgeCheck,
@@ -30,15 +29,20 @@ import {
   BookOpenCheck,
   Camera,
   ClipboardCheck,
-  Building2,
   GraduationCap,
-  ShieldAlert,
   MapPinned,
   Landmark,
   FileHeart,
   UserCog,
-  EyeOff,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
+
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:4000"
+).replace(/\/+$/, "");
 
 const bannerImage =
   "https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=2400&q=90";
@@ -164,83 +168,6 @@ const bdBenefits = [
   },
 ];
 
-const profileTips = [
-  {
-    title: "Complete biodata properly",
-    text: "Add education, profession, family values, lifestyle and partner preference to get better responses.",
-    icon: ClipboardCheck,
-    step: "01",
-  },
-  {
-    title: "Use quality photos safely",
-    text: "Upload good photos for verification, but public users will still see locked photos for privacy.",
-    icon: Camera,
-    step: "02",
-  },
-  {
-    title: "Write clear expectations",
-    text: "Mention preferred age, religion, location, education, profession and family expectations honestly.",
-    icon: BookOpenCheck,
-    step: "03",
-  },
-  {
-    title: "Keep family details updated",
-    text: "Bangladeshi marriage decisions often include family, so guardian-friendly biodata is important.",
-    icon: Users,
-    step: "04",
-  },
-];
-
-const packages = [
-  {
-    name: "Basic",
-    monthly: 499,
-    yearly: 4990,
-    description: "For users who want to browse and shortlist public profiles.",
-    icon: Heart,
-    popular: false,
-    features: [
-      "Browse public profiles",
-      "Limited biodata preview",
-      "Photo locked privacy",
-      "Basic search filters",
-      "Profile shortlist access",
-    ],
-  },
-  {
-    name: "Premium",
-    monthly: 999,
-    yearly: 9990,
-    description: "Best for serious users who want full biodata access.",
-    icon: Crown,
-    popular: true,
-    features: [
-      "Full biodata access",
-      "Better match recommendations",
-      "Priority profile visibility",
-      "Chat request access",
-      "View allowed private details",
-      "Human support included",
-    ],
-  },
-  {
-    name: "Assisted",
-    monthly: 1999,
-    yearly: 19990,
-    description: "For families who want guided matchmaking support.",
-    icon: Gem,
-    popular: false,
-    features: [
-      "Dedicated match assistant",
-      "Manual shortlist support",
-      "Family-focused matching",
-      "Priority verification",
-      "Premium support",
-      "Best match suggestions",
-    ],
-  },
-];
-
 const testimonials = [
   {
     name: "Rahman Family",
@@ -301,6 +228,165 @@ const staggerWrap = {
       staggerChildren: 0.08,
     },
   },
+};
+
+const isFreePlan = (plan) => {
+  return (
+    plan?.is_free ||
+    plan?.is_default ||
+    plan?.slug === "free" ||
+    Number(plan?.price || 0) === 0
+  );
+};
+
+const numberValue = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const getLimitLabel = (value) => {
+  const limit = numberValue(value, 0);
+
+  if (limit === -1) return "Unlimited";
+  return limit.toLocaleString("en-BD");
+};
+
+const formatMoney = (price, currency = "BDT") => {
+  const amount = numberValue(price, 0);
+
+  if (amount <= 0) return "Free";
+
+  if (String(currency).toUpperCase() === "BDT") {
+    return `৳${amount.toLocaleString("en-BD")}`;
+  }
+
+  return `${String(currency).toUpperCase()} ${amount.toLocaleString("en-BD")}`;
+};
+
+const formatDuration = (plan) => {
+  const days = numberValue(plan?.duration_days, 0);
+
+  if (isFreePlan(plan) || !days) return "Lifetime";
+  if (days === 1) return "1 day";
+  if (days < 30) return `${days} days`;
+
+  if (days % 365 === 0) {
+    const years = days / 365;
+    return years === 1 ? "1 year" : `${years} years`;
+  }
+
+  if (days % 30 === 0) {
+    const months = days / 30;
+    return months === 1 ? "1 month" : `${months} months`;
+  }
+
+  return `${days} days`;
+};
+
+const resolvePlanIcon = (plan) => {
+  const text = `${plan?.name || ""} ${plan?.slug || ""}`.toLowerCase();
+
+  if (
+    text.includes("assisted") ||
+    text.includes("vip") ||
+    text.includes("diamond") ||
+    text.includes("family")
+  ) {
+    return Gem;
+  }
+
+  if (
+    text.includes("premium") ||
+    text.includes("gold") ||
+    text.includes("pro") ||
+    text.includes("plus")
+  ) {
+    return Crown;
+  }
+
+  return Heart;
+};
+
+const buildMembershipFeatures = (plan) => {
+  const features = plan?.features || {};
+  const items = [];
+
+  if (features.can_browse_profiles) {
+    items.push(`${getLimitLabel(features.profile_view_limit)} profile views`);
+  }
+
+  if (features.can_view_full_profiles) {
+    items.push("Full profile access");
+  }
+
+  if (features.can_view_profile_photos) {
+    items.push("View profile photos");
+  }
+
+  if (features.can_view_biodata) {
+    items.push("Full biodata access");
+  }
+
+  if (features.can_send_connection_request) {
+    items.push(
+      `${getLimitLabel(features.connection_request_limit)} connection requests`
+    );
+  }
+
+  if (features.can_accept_connection_request) {
+    items.push("Accept connection requests");
+  }
+
+  if (features.can_send_messages) {
+    items.push(`${getLimitLabel(features.message_limit)} messages`);
+  }
+
+  if (features.can_request_photo_access) {
+    items.push(`${getLimitLabel(features.photo_request_limit)} photo access requests`);
+  }
+
+  if (features.can_request_guardian_contact) {
+    items.push(
+      `${getLimitLabel(
+        features.guardian_contact_request_limit
+      )} guardian contact requests`
+    );
+  }
+
+  if (features.can_view_phone) {
+    items.push("View phone number");
+  }
+
+  if (features.can_view_email) {
+    items.push("View email address");
+  }
+
+  if (features.can_view_address) {
+    items.push("View address");
+  }
+
+  if (features.can_shortlist_profiles) {
+    items.push(`${getLimitLabel(features.shortlist_limit)} shortlisted profiles`);
+  }
+
+  if (features.can_see_who_viewed_me) {
+    items.push("See who viewed your profile");
+  }
+
+  if (features.can_boost_profile) {
+    items.push(`${getLimitLabel(features.profile_boost_days)} days profile boost`);
+  }
+
+  if (features.priority_support) {
+    items.push("Priority support");
+  }
+
+  if (!items.length) {
+    items.push("Limited public profile browsing");
+    items.push("Privacy protected access");
+  }
+
+  return items.slice(0, 9);
 };
 
 function SelectBox({ value, onChange, children, icon: Icon }) {
@@ -401,7 +487,7 @@ function BangladeshFeatureCard({ item, index }) {
           {item.shape}
         </div>
 
-        <div className="flex h-13 w-13 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 ring-8 ring-rose-50/50">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 ring-8 ring-rose-50/50">
           <Icon className="h-6 w-6" />
         </div>
 
@@ -507,7 +593,10 @@ function TrustExperienceSection() {
             </div>
           </motion.div>
 
-          <motion.div variants={fadeUp} className="rounded-[2rem] bg-white p-5 shadow-sm md:p-7">
+          <motion.div
+            variants={fadeUp}
+            className="rounded-[2rem] bg-white p-5 shadow-sm md:p-7"
+          >
             <div className="grid gap-6 xl:grid-cols-[1fr_0.78fr] xl:items-center">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-rose-700">
@@ -813,68 +902,160 @@ function FeaturedSlider() {
   );
 }
 
-function InfoCard({ item }) {
-  const Icon = item.icon;
-
+function MembershipPlanSkeleton() {
   return (
-    <motion.div
-      variants={fadeUp}
-      whileHover={{ y: -4 }}
-      className="rounded-[2rem] border border-white bg-white p-6 shadow-sm"
-    >
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-        <Icon className="h-6 w-6" />
+    <div className="rounded-[2rem] border border-white bg-white p-6 shadow-sm">
+      <div className="h-12 w-12 animate-pulse rounded-2xl bg-slate-100" />
+      <div className="mt-5 h-7 w-36 animate-pulse rounded-full bg-slate-100" />
+      <div className="mt-3 h-4 w-full animate-pulse rounded-full bg-slate-100" />
+      <div className="mt-2 h-4 w-2/3 animate-pulse rounded-full bg-slate-100" />
+      <div className="mt-6 h-10 w-40 animate-pulse rounded-full bg-slate-100" />
+      <div className="mt-7 space-y-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <div className="h-4 w-4 animate-pulse rounded-full bg-slate-100" />
+            <div className="h-4 flex-1 animate-pulse rounded-full bg-slate-100" />
+          </div>
+        ))}
       </div>
-
-      <h3 className="mt-5 text-lg font-bold text-slate-950">{item.title}</h3>
-
-      <p className="mt-2 text-sm leading-6 text-slate-500">
-        {item.description || item.text}
-      </p>
-    </motion.div>
+      <div className="mt-8 h-12 animate-pulse rounded-2xl bg-slate-100" />
+    </div>
   );
 }
 
-function PackageCard({ item, billing }) {
-  const Icon = item.icon;
-  const price = billing === "monthly" ? item.monthly : item.yearly;
-  const period = billing === "monthly" ? "/month" : "/year";
+function MembershipErrorState({ onRetry }) {
+  return (
+    <div className="mt-12 rounded-[2rem] border border-rose-100 bg-white p-8 text-center shadow-sm">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+        <AlertCircle className="h-7 w-7" />
+      </div>
+
+      <h3 className="mt-4 text-xl font-bold text-slate-950">
+        Membership plans could not load
+      </h3>
+
+      <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
+        Please check your server connection and try again.
+      </p>
+
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 text-sm font-bold text-white transition hover:bg-rose-700"
+      >
+        <RefreshCw className="h-4 w-4" />
+        Retry
+      </button>
+    </div>
+  );
+}
+
+function MembershipEmptyState() {
+  return (
+    <div className="mt-12 rounded-[2rem] border border-white bg-white p-8 text-center shadow-sm">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+        <WalletCards className="h-7 w-7" />
+      </div>
+
+      <h3 className="mt-4 text-xl font-bold text-slate-950">
+        No membership plans available
+      </h3>
+
+      <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
+        Active membership plans will appear here after they are added from the
+        admin panel.
+      </p>
+    </div>
+  );
+}
+
+function MembershipPlanCard({ plan, popular }) {
+  const Icon = resolvePlanIcon(plan);
+  const free = isFreePlan(plan);
+  const featureItems = buildMembershipFeatures(plan);
+  const duration = formatDuration(plan);
+  const price = formatMoney(plan?.price, plan?.currency);
+
+  const handleChoosePlan = () => {
+    if (free) {
+      window.location.href = "/register";
+      return;
+    }
+
+    const token =
+      localStorage.getItem("token") || sessionStorage.getItem("token");
+
+    const target = `/plans?planId=${plan?._id || ""}`;
+
+    if (!token) {
+      window.location.href = `/sign-in?redirect=${encodeURIComponent(target)}`;
+      return;
+    }
+
+    window.location.href = target;
+  };
 
   return (
     <motion.div
       variants={fadeUp}
       whileHover={{ y: -5 }}
-      className={`relative rounded-[2rem] border bg-white p-6 shadow-sm transition ${
-        item.popular
+      className={`relative flex h-full flex-col rounded-[2rem] border bg-white p-6 shadow-sm transition ${
+        popular
           ? "border-rose-300 shadow-rose-100"
           : "border-white hover:border-rose-100"
       }`}
     >
-      {item.popular ? (
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-rose-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-rose-100">
-          Most Popular
+      {popular ? (
+        <div className="absolute -top-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-rose-100">
+          <Crown className="h-3.5 w-3.5" />
+          Recommended
         </div>
       ) : null}
 
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+      {free ? (
+        <div className="absolute right-5 top-5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+          Free
+        </div>
+      ) : null}
+
+      <div
+        className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+          popular ? "bg-rose-600 text-white" : "bg-rose-50 text-rose-600"
+        }`}
+      >
         <Icon className="h-6 w-6" />
       </div>
 
-      <h3 className="mt-5 text-2xl font-bold text-slate-950">{item.name}</h3>
+      <h3 className="mt-5 text-2xl font-bold text-slate-950">
+        {plan?.name || "Membership Plan"}
+      </h3>
 
       <p className="mt-2 min-h-12 text-sm leading-6 text-slate-500">
-        {item.description}
+        {plan?.description ||
+          "Unlock membership benefits based on your selected plan."}
       </p>
 
-      <div className="mt-6 flex items-end gap-1">
-        <span className="text-4xl font-bold text-slate-950">৳{price}</span>
+      <div className="mt-6 flex flex-wrap items-end gap-x-2 gap-y-1">
+        <span
+          className={`text-4xl font-bold ${
+            free ? "text-emerald-600" : "text-slate-950"
+          }`}
+        >
+          {price}
+        </span>
+
         <span className="mb-1 text-sm font-semibold text-slate-500">
-          {period}
+          {free ? "access" : `/ ${duration}`}
         </span>
       </div>
 
-      <div className="mt-6 space-y-3">
-        {item.features.map((feature) => (
+      <div className="mt-3 inline-flex w-fit items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-500">
+        <ShieldCheck className="h-3.5 w-3.5 text-rose-500" />
+        {duration} validity
+      </div>
+
+      <div className="mt-7 grow space-y-3">
+        {featureItems.map((feature) => (
           <div key={feature} className="flex items-start gap-2">
             <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
             <span className="text-sm font-medium leading-5 text-slate-600">
@@ -886,16 +1067,74 @@ function PackageCard({ item, billing }) {
 
       <button
         type="button"
-        className={`mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold transition ${
-          item.popular
+        onClick={handleChoosePlan}
+        className={`mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold transition ${
+          popular
             ? "bg-rose-600 text-white shadow-lg shadow-rose-100 hover:bg-rose-700"
             : "bg-slate-900 text-white hover:bg-rose-700"
         }`}
       >
-        Choose Plan
+        {free ? "Create Free Profile" : "Choose Plan"}
         <ArrowRight className="h-4 w-4" />
       </button>
     </motion.div>
+  );
+}
+
+function MembershipPackagesSection({
+  loading,
+  error,
+  plans,
+  recommendedPlanId,
+  onRetry,
+}) {
+  return (
+    <section className="px-4 pb-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <SectionTitle
+          eyebrow="Membership Packages"
+          title="Choose the right plan for your match journey"
+          subtitle="Start with a free profile, then unlock full biodata, photos, contact access and premium features based on your selected plan."
+        />
+
+        {loading ? (
+          <div className="mt-12 grid gap-6 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <MembershipPlanSkeleton key={index} />
+            ))}
+          </div>
+        ) : error ? (
+          <MembershipErrorState onRetry={onRetry} />
+        ) : plans.length === 0 ? (
+          <MembershipEmptyState />
+        ) : (
+          <>
+            <div className="mt-8 flex justify-center">
+              <div className="inline-flex items-center gap-2 rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold text-rose-700 shadow-sm">
+                <Crown className="h-4 w-4 fill-amber-400 text-amber-500" />
+                Membership Plans
+              </div>
+            </div>
+
+            <motion.div
+              variants={staggerWrap}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-80px" }}
+              className="mt-12 grid gap-6 lg:grid-cols-3"
+            >
+              {plans.map((plan) => (
+                <MembershipPlanCard
+                  key={plan?._id || plan?.slug || plan?.name}
+                  plan={plan}
+                  popular={plan?._id === recommendedPlanId}
+                />
+              ))}
+            </motion.div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -972,8 +1211,6 @@ function FAQItem({ item }) {
 }
 
 export default function Home() {
-  const [billing, setBilling] = useState("monthly");
-
   const [filters, setFilters] = useState({
     lookingFor: "",
     religion: "",
@@ -981,7 +1218,77 @@ export default function Home() {
     ageRange: "",
   });
 
-  const yearlySaving = useMemo(() => billing === "yearly", [billing]);
+  const [membershipPlans, setMembershipPlans] = useState([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState("");
+  const [reloadPlansKey, setReloadPlansKey] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchMembershipPlans = async () => {
+      try {
+        setPlansLoading(true);
+        setPlansError("");
+
+        const response = await fetch(`${API_BASE_URL}/api/memberships`, {
+          method: "GET",
+          signal: controller.signal,
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data?.message || "Failed to load membership plans");
+        }
+
+        const items = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.items)
+          ? data.items
+          : [];
+
+        setMembershipPlans(items);
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+
+        setMembershipPlans([]);
+        setPlansError(error?.message || "Failed to load membership plans");
+      } finally {
+        if (!controller.signal.aborted) {
+          setPlansLoading(false);
+        }
+      }
+    };
+
+    fetchMembershipPlans();
+
+    return () => controller.abort();
+  }, [reloadPlansKey]);
+
+  const sortedMembershipPlans = useMemo(() => {
+    return [...membershipPlans].sort((a, b) => {
+      const defaultSort =
+        Number(Boolean(b?.is_default)) - Number(Boolean(a?.is_default));
+
+      if (defaultSort !== 0) return defaultSort;
+
+      const sortOrderA = numberValue(a?.sort_order, 0);
+      const sortOrderB = numberValue(b?.sort_order, 0);
+
+      if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
+
+      return numberValue(a?.price, 0) - numberValue(b?.price, 0);
+    });
+  }, [membershipPlans]);
+
+  const recommendedPlanId = useMemo(() => {
+    const paidPlan = sortedMembershipPlans.find((plan) => !isFreePlan(plan));
+    return paidPlan?._id || sortedMembershipPlans[0]?._id || "";
+  }, [sortedMembershipPlans]);
 
   const updateFilter = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -1017,11 +1324,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f8f3ef] text-slate-800">
-      {/* HERO */}
       <section className="pt-[74px] sm:px-6 sm:pt-[86px] lg:px-8">
         <div className="mx-auto max-w-7xl">
           <div className="relative">
-            {/* Mobile: full-width banner first, then filters below. Desktop keeps a premium contained banner. */}
             <div className="relative w-full overflow-hidden bg-slate-950 shadow-xl shadow-rose-100/70 sm:rounded-[1.75rem] lg:rounded-[2rem]">
               <img
                 src={bannerImage}
@@ -1057,7 +1362,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Search card: mobile stays after the banner, desktop slightly overlaps for premium look */}
             <motion.div
               initial={{ opacity: 0, y: 22 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1152,7 +1456,6 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Stats: compact feature strip */}
             <motion.div
               variants={staggerWrap}
               initial="hidden"
@@ -1167,7 +1470,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* BANGLADESH FEATURES */}
       <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle
@@ -1198,74 +1500,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SLIDER */}
       <section className="px-4 pb-20 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <FeaturedSlider />
         </div>
       </section>
 
-      {/* TRUST EXPERIENCE */}
       <TrustExperienceSection />
 
-      {/* PACKAGES */}
-      <section className="px-4 pb-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <SectionTitle
-            eyebrow="Membership Packages"
-            title="Choose the right plan for your match journey"
-            subtitle="Start with browsing, unlock full biodata with premium, or choose assisted support for family-guided matchmaking."
-          />
+      <MembershipPackagesSection
+        loading={plansLoading}
+        error={plansError}
+        plans={sortedMembershipPlans}
+        recommendedPlanId={recommendedPlanId}
+        onRetry={() => setReloadPlansKey((prev) => prev + 1)}
+      />
 
-          <div className="mt-8 flex justify-center">
-            <div className="inline-flex rounded-2xl border border-white bg-white p-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => setBilling("monthly")}
-                className={`h-11 rounded-xl px-5 text-sm font-bold transition ${
-                  billing === "monthly"
-                    ? "bg-rose-600 text-white"
-                    : "text-slate-600 hover:bg-rose-50 hover:text-rose-700"
-                }`}
-              >
-                Monthly
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setBilling("yearly")}
-                className={`h-11 rounded-xl px-5 text-sm font-bold transition ${
-                  billing === "yearly"
-                    ? "bg-rose-600 text-white"
-                    : "text-slate-600 hover:bg-rose-50 hover:text-rose-700"
-                }`}
-              >
-                Yearly
-              </button>
-            </div>
-          </div>
-
-          {yearlySaving ? (
-            <p className="mt-3 text-center text-sm font-semibold text-emerald-600">
-              Yearly plans include better value for long-term serious search.
-            </p>
-          ) : null}
-
-          <motion.div
-            variants={staggerWrap}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-80px" }}
-            className="mt-12 grid gap-6 lg:grid-cols-3"
-          >
-            {packages.map((item) => (
-              <PackageCard key={item.name} item={item} billing={billing} />
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* REVIEWS */}
       <section className="px-4 pb-20 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionTitle
@@ -1339,7 +1589,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ */}
       <section className="px-4 pb-20 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <SectionTitle
@@ -1356,7 +1605,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA */}
       <section className="px-4 pb-20 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <motion.div

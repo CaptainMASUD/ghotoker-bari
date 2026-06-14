@@ -1,599 +1,963 @@
-// PremiumChatUI.jsx
-"use client";
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useSelector } from "react-redux";
-import { io } from "socket.io-client";
-import axios from "axios";
-import { jwtDecode } from "jwt-decode";
-import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Plus, MoreVertical, Phone, Video, Check, CheckCheck, Send,
-  Paperclip, Image as ImageIcon, Smile, Mic, Bell, Settings, LogOut,
-} from "lucide-react";
+  FaCheck,
+  FaCheckCircle,
+  FaCrown,
+  FaExclamationCircle,
+  FaPaperPlane,
+  FaRegCommentDots,
+  FaSearch,
+  FaSpinner,
+  FaSyncAlt,
+  FaTimesCircle,
+} from "react-icons/fa";
 
-/** =========================
- *  CONFIG
- *  ========================= */
-const API_BASE = "https://ghotoker-bari-api.vercel.app";        // REST base
-const SOCKET_URL = "https://ghotoker-bari-api.vercel.app/chat"; // Socket.IO namespace
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-/** =========================
- *  Auth helpers
- *  ========================= */
-const parseLS = (key) => {
+function getStoredToken() {
   try {
-    const v = localStorage.getItem(key);
-    return v ? JSON.parse(v) : null;
+    return (
+      localStorage.getItem("token") ||
+      sessionStorage.getItem("token") ||
+      localStorage.getItem("accessToken") ||
+      sessionStorage.getItem("accessToken") ||
+      localStorage.getItem("authToken") ||
+      sessionStorage.getItem("authToken") ||
+      ""
+    );
   } catch {
-    return null;
+    return "";
   }
-};
+}
 
-const useAuthToken = () => {
-  const reduxCurrent = useSelector((s) => s.user?.currentUser ?? null);
-  const tokenFromRedux =
-    typeof reduxCurrent === "string"
-      ? reduxCurrent
-      : reduxCurrent?.token ?? null;
-
-  const tokenFromLS = localStorage.getItem("token") || null;
-  return tokenFromRedux || tokenFromLS || null;
-};
-
-const useMyUserObject = () => {
-  const reduxCurrent = useSelector((s) => s.user?.currentUser ?? null);
-  if (reduxCurrent && typeof reduxCurrent === "object" && reduxCurrent._id) {
-    return reduxCurrent;
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
   }
-  const candidates = ["currentUser", "user", "authUser"];
-  for (const key of candidates) {
-    const obj = parseLS(key);
-    if (obj && typeof obj === "object" && obj._id) return obj;
+}
+
+async function fetchWithAuth(url, token, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {}),
+    },
+  });
+
+  const result = await safeJson(response);
+
+  return { response, result };
+}
+
+function extractUser(result) {
+  return (
+    result?.user ||
+    result?.data?.user ||
+    result?.data ||
+    result?.profile ||
+    result?.me ||
+    null
+  );
+}
+
+function extractItems(result) {
+  if (Array.isArray(result?.items)) return result.items;
+  if (Array.isArray(result?.data?.items)) return result.data.items;
+  if (Array.isArray(result?.requests)) return result.requests;
+  if (Array.isArray(result)) return result;
+  return [];
+}
+
+function getId(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return String(value?._id || value?.id || "");
+}
+
+function cleanText(value) {
+  if (!value) return "";
+
+  return String(value)
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getPersonName(user) {
+  return (
+    user?.full_name ||
+    [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
+    user?.username ||
+    "User"
+  );
+}
+
+function getPersonAvatar(user) {
+  const name = getPersonName(user);
+
+  const photos = Array.isArray(user?.profile_photos)
+    ? user.profile_photos.filter(Boolean)
+    : [];
+
+  if (photos[0]) return photos[0];
+
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+    name
+  )}`;
+}
+
+function formatTime(value) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function isDateActive(expiry) {
+  if (!expiry) return true;
+
+  const expiryDate = new Date(expiry);
+
+  if (Number.isNaN(expiryDate.getTime())) return true;
+
+  return expiryDate.getTime() >= Date.now();
+}
+
+function getMembershipId(user) {
+  const statusObject =
+    user?.membership_status && typeof user.membership_status === "object"
+      ? user.membership_status
+      : null;
+
+  if (statusObject?.plan_id) return statusObject.plan_id;
+
+  const membership = user?.membership;
+
+  if (!membership) return "";
+
+  if (typeof membership === "object") {
+    return membership?._id || membership?.id || "";
   }
+
+  return membership;
+}
+
+function buildMembershipView(user) {
+  const rawStatus = user?.membership_status;
+  const statusObject =
+    rawStatus && typeof rawStatus === "object" ? rawStatus : null;
+
+  const rawMembership = user?.membership;
+  const membershipObject =
+    rawMembership && typeof rawMembership === "object" ? rawMembership : null;
+
+  const membershipId = getMembershipId(user);
+
+  const status = String(
+    statusObject?.status ||
+      (typeof rawStatus === "string" ? rawStatus : "") ||
+      ""
+  ).toLowerCase();
+
+  const slug = statusObject?.slug || membershipObject?.slug || "";
+
+  const isFree =
+    Boolean(statusObject?.is_free || membershipObject?.is_free) ||
+    slug === "free" ||
+    status === "free";
+
+  const expiry =
+    statusObject?.expiry ||
+    user?.membership_expiry ||
+    membershipObject?.membership_expiry ||
+    null;
+
+  let active = false;
+
+  if (typeof statusObject?.active === "boolean") {
+    active = statusObject.active && isDateActive(expiry);
+  } else if (["expired", "cancelled", "canceled", "inactive"].includes(status)) {
+    active = false;
+  } else if (membershipId) {
+    active = isDateActive(expiry);
+  }
+
+  const features = statusObject?.features || membershipObject?.features || {};
+
+  return {
+    id: membershipId,
+    name:
+      statusObject?.name ||
+      membershipObject?.name ||
+      cleanText(slug || status || "Free Plan"),
+    active,
+    is_free: isFree,
+    is_paid: Boolean(statusObject?.is_paid || (!isFree && active)),
+    can_send_messages: Boolean(features.can_send_messages),
+    message_limit: features.message_limit ?? 0,
+  };
+}
+
+async function loadAllActions({
+  token,
+  type,
+  status = "",
+  box = "all",
+  maxPages = 6,
+}) {
+  const rows = [];
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const params = new URLSearchParams();
+
+    if (type) params.set("type", type);
+    if (status) params.set("status", status);
+
+    params.set("box", box);
+    params.set("limit", "50");
+    params.set("page", String(page));
+
+    const { response, result } = await fetchWithAuth(
+      `${API_BASE_URL}/api/matrimony-actions/my?${params.toString()}`,
+      token
+    );
+
+    if (!response.ok) {
+      throw new Error(result?.message || "Could not load chat data.");
+    }
+
+    const items = extractItems(result);
+    rows.push(...items);
+
+    const totalPages = Number(result?.totalPages || 1);
+
+    if (page >= totalPages) break;
+  }
+
+  return rows;
+}
+
+function getPeerFromConnection(connection, myId) {
+  const fromId = getId(connection?.from_user);
+  const toId = getId(connection?.to_user);
+
+  if (fromId === myId) return connection?.to_user;
+  if (toId === myId) return connection?.from_user;
+
   return null;
-};
-
-const useMyIdentity = () => {
-  const token = useAuthToken();
-  const u = useMyUserObject();
-
-  const myId =
-    u?._id ||
-    (token
-      ? (() => {
-          try { return jwtDecode(token)?.id || null; } catch { return null; }
-        })()
-      : null);
-
-  const myName =
-    u?.username ||
-    [u?.first_name, u?.last_name].filter(Boolean).join(" ") ||
-    "You";
-
-  return { myId, myName, token };
-};
-
-const useApi = (token) => {
-  const api = useMemo(() => {
-    const a = axios.create({ baseURL: API_BASE });
-    a.interceptors.request.use((config) => {
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-      return config;
-    });
-    return a;
-  }, [token]);
-  return api;
-};
-
-/** =========================
- *  UI helpers
- *  ========================= */
-function Avatar({ name, color = "bg-gradient-to-br from-indigo-500 to-violet-600", size = "w-14 h-14", ring = true }) {
-  const initials = useMemo(() => name.split(" ").map(n => n[0]).slice(0,2).join("").toUpperCase(), [name]);
-  return (
-    <div className={`relative ${size} shrink-0 rounded-full ${color} text-white grid place-items-center font-semibold shadow-lg ${ring ? 'ring-2 ring-white/10' : ''}`}>
-      <span>{initials}</span>
-      <span className="absolute -bottom-0.5 -right-0.5 block w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-slate-800" />
-    </div>
-  );
 }
 
-function Bubble({ message, isMe }) {
-  const statusIcon =
-    message.status === "sent" ? (
-      <Check className="w-3 h-3" />
-    ) : message.status === "delivered" ? (
-      <CheckCheck className="w-3 h-3" />
-    ) : (
-      <CheckCheck className="w-3 h-3 text-sky-400" />
+function buildMessage(action, myId) {
+  const fromId = getId(action?.from_user);
+  const toId = getId(action?.to_user);
+  const isMine = fromId === myId;
+
+  return {
+    id: getId(action) || `${fromId}-${toId}-${action?.createdAt}`,
+    peerId: isMine ? toId : fromId,
+    fromId,
+    toId,
+    text: action?.message || "",
+    time: action?.createdAt || action?.responded_at || null,
+    isMine,
+    status: action?.status || "sent",
+    raw: action,
+  };
+}
+
+function groupMessagesByPeer(messages, myId) {
+  const grouped = {};
+
+  messages.forEach((action) => {
+    const item = buildMessage(action, myId);
+
+    if (!item.peerId) return;
+
+    if (!grouped[item.peerId]) {
+      grouped[item.peerId] = [];
+    }
+
+    grouped[item.peerId].push(item);
+  });
+
+  Object.keys(grouped).forEach((peerId) => {
+    grouped[peerId].sort(
+      (a, b) => new Date(a.time || 0) - new Date(b.time || 0)
     );
+  });
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 10 }}
-      transition={{ type: "spring", stiffness: 320, damping: 24 }}
-      className={`flex items-end gap-3 mt-14 ${isMe ? "justify-end" : "justify-start"}`}
-    >
-      {!isMe && <Avatar name={message.from} size="w-12 h-12" ring={false} />}
-      <div
-        className={`max-w-[75%] rounded-2xl px-5 py-3 text-base leading-relaxed shadow-sm backdrop-blur border ${
-          isMe
-            ? "bg-gradient-to-br from-sky-600 to-indigo-600 text-white border-white/10"
-            : "bg-white/70 dark:bg-slate-800/60 text-slate-800 dark:text-slate-100 border-black/5 dark:border-white/5"
-        }`}
-      >
-        {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
-        {message.image && (
-          <div className="mt-2 overflow-hidden rounded-xl border border-white/10">
-            <img src={message.image} alt="attachment" className="max-h-72 object-cover" />
-          </div>
-        )}
-        <div
-          className={`mt-2 flex items-center gap-1 text-[11px] ${
-            isMe ? "text-white/70" : "text-slate-500 dark:text-slate-400"
-          }`}
-        >
-          <span>{message.time}</span>
-          {isMe && <span className="ml-1 inline-flex items-center gap-0.5">{statusIcon}</span>}
-        </div>
-      </div>
-      {isMe && <Avatar name="You" size="w-12 h-12" ring={false} />}
-    </motion.div>
-  );
+  return grouped;
 }
 
-function TypingDots() {
-  return (
-    <div className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-white/80 dark:bg-slate-800/70 border border-black/5 dark:border-white/5 mt-14">
-      <motion.span className="w-2 h-2 rounded-full" style={{ background: "currentColor" }} animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut", delay: 0 }} />
-      <motion.span className="w-2 h-2 rounded-full" style={{ background: "currentColor" }} animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut", delay: 0.15 }} />
-      <motion.span className="w-2 h-2 rounded-full" style={{ background: "currentColor" }} animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut", delay: 0.3 }} />
-    </div>
-  );
-}
-
-/** =========================
- *  Main Component
- *  ========================= */
-export default function PremiumChatUI() {
-  const { myId, myName, token } = useMyIdentity();
-  const api = useApi(token);
-
-  const [query, setQuery] = useState("");
-  const [selectedPeerId, setSelectedPeerId] = useState(null);
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [shouldAutoscroll, setShouldAutoscroll] = useState(false);
-
-  // threads: [{ peerId, name, unread, last, lastAt, color }]
-  const [threads, setThreads] = useState([]);
-  // messages map: peerId -> [{ id, from, text, time, status, raw }]
-  const [messagesByPeer, setMessagesByPeer] = useState({});
-  const currentMessages = messagesByPeer[selectedPeerId] || [];
+export default function InboxSection({ token: propToken = "" }) {
+  const token = propToken || getStoredToken();
   const messageEndRef = useRef(null);
-  const socketRef = useRef(null);
 
-  const fmtTime = (iso) =>
-    new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const [me, setMe] = useState(null);
+  const [threads, setThreads] = useState([]);
+  const [messagesByPeer, setMessagesByPeer] = useState({});
+  const [selectedPeerId, setSelectedPeerId] = useState("");
+  const [query, setQuery] = useState("");
+  const [input, setInput] = useState("");
 
-  // Peer name fallback only (no admin/user fetch)
-  const nameForPeer = (peerId) =>
-    threads.find((t) => t.peerId === peerId)?.name || `User ${String(peerId).slice(-4)}`;
+  const [limitInfo, setLimitInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [sendError, setSendError] = useState("");
 
-  const loadThreads = async () => {
-    const { data } = await api.get("/api/messages/threads");
-    const enriched = (data?.threads || []).map((t) => {
-      const peerId = t._id;
-      return {
-        peerId,
-        name: `User ${String(peerId).slice(-4)}`, // placeholder only
-        unread: t.unreadCount || 0,
-        last: t.lastMessage?.content || "",
-        lastAt: t.lastMessage?.createdAt || null,
-        color: "bg-gradient-to-br from-emerald-500 to-cyan-500",
-      };
-    });
-    enriched.sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0));
-    setThreads(enriched);
-    if (!selectedPeerId && enriched[0]?.peerId) {
-      setSelectedPeerId(enriched[0].peerId);
-    }
-  };
+  const myId = getId(me);
+  const membership = useMemo(() => buildMembershipView(me), [me]);
 
-  const loadConversation = async (peerId) => {
-    const { data } = await api.get(`/api/messages/${peerId}?limit=50&skip=0`);
-    const display = nameForPeer(peerId);
-    const msgs = (data?.messages || [])
-      .map((m) => ({
-        id: m._id,
-        from: m.sender === myId ? "You" : display,
-        text: m.content,
-        time: fmtTime(m.createdAt),
-        status: m.sender === myId ? (m.seen ? "read" : "delivered") : undefined,
-        raw: m,
-      }))
-      .reverse(); // API returns newest-first
-    setMessagesByPeer((prev) => ({ ...prev, [peerId]: msgs }));
-  };
+  const currentThread = useMemo(() => {
+    return threads.find((item) => item.peerId === selectedPeerId) || null;
+  }, [threads, selectedPeerId]);
 
-  useEffect(() => {
-    if (!shouldAutoscroll) return;
-    messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    const t = setTimeout(() => setShouldAutoscroll(false), 0);
-    return () => clearTimeout(t);
-  }, [currentMessages.length, shouldAutoscroll]);
-
-  useEffect(() => {
-    if (!token || !myId) return;
-
-    (async () => {
-      await loadThreads();
-    })();
-
-    const s = io(SOCKET_URL, { auth: { token } });
-    socketRef.current = s;
-
-    s.on("connect_error", (err) => {
-      console.error("socket connect_error:", err?.message || err);
-    });
-
-    s.on("message", async (payload) => {
-      const { sender, receiver, content, createdAt, _id } = payload;
-      const peerId = sender === myId ? receiver : sender;
-
-      // ensure thread exists
-      let thread = threads.find((t) => t.peerId === peerId);
-      if (!thread) {
-        thread = {
-          peerId,
-          name: `User ${String(peerId).slice(-4)}`,
-          unread: 0,
-          last: content,
-          lastAt: createdAt,
-          color: "bg-gradient-to-br from-emerald-500 to-cyan-500",
-        };
-        setThreads((prev) => [thread, ...prev]);
-      } else {
-        setThreads((prev) =>
-          prev
-            .map((t) =>
-              t.peerId === peerId
-                ? {
-                    ...t,
-                    last: content,
-                    lastAt: createdAt,
-                    unread:
-                      peerId === selectedPeerId
-                        ? t.unread
-                        : t.unread + (sender !== myId ? 1 : 0),
-                  }
-                : t
-            )
-            .sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0))
-        );
-      }
-
-      // push message
-      setMessagesByPeer((prev) => {
-        const list = prev[peerId] || [];
-        const pretty = {
-          id: _id,
-          from: sender === myId ? "You" : nameForPeer(peerId),
-          text: content,
-          time: fmtTime(createdAt),
-          status: sender === myId ? "sent" : undefined,
-          raw: payload,
-        };
-        return { ...prev, [peerId]: [...list, pretty] };
-      });
-
-      if (peerId === selectedPeerId) setShouldAutoscroll(true);
-    });
-
-    return () => {
-      s.disconnect();
-      socketRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, myId, selectedPeerId, threads.length]);
-
-  useEffect(() => {
-    if (selectedPeerId && token) {
-      loadConversation(selectedPeerId);
-      setThreads((prev) =>
-        prev.map((t) => (t.peerId === selectedPeerId ? { ...t, unread: 0 } : t))
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPeerId, token]);
-
-  const handleSend = async () => {
-    if (!input.trim() || !selectedPeerId) return;
-    const text = input.trim();
-    setInput("");
-
-    const optimistic = {
-      id: `temp-${Date.now()}`,
-      from: "You",
-      text,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      status: "sent",
-    };
-    setMessagesByPeer((p) => ({
-      ...p,
-      [selectedPeerId]: [...(p[selectedPeerId] || []), optimistic],
-    }));
-    setThreads((prev) =>
-      prev
-        .map((t) =>
-          t.peerId === selectedPeerId
-            ? { ...t, last: text, lastAt: new Date().toISOString() }
-            : t
-        )
-        .sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0))
-    );
-    setShouldAutoscroll(true);
-
-    let sentViaSocket = false;
-    try {
-      await new Promise((resolve, reject) => {
-        socketRef.current?.emit(
-          "send_message",
-          { to: selectedPeerId, content: text },
-          (res) => {
-            if (!res?.ok) return reject(new Error(res?.error || "Send failed"));
-            resolve();
-          }
-        );
-      });
-      sentViaSocket = true;
-    } catch {
-      try {
-        await api.post("/api/messages", { to: selectedPeerId, content: text });
-      } catch (err) {
-        setMessagesByPeer((p) => ({
-          ...p,
-          [selectedPeerId]: (p[selectedPeerId] || []).filter(
-            (m) => m.id !== optimistic.id
-          ),
-        }));
-        alert(err?.response?.data?.message || err.message || "Failed to send");
-      }
-    }
-
-    if (!sentViaSocket) {
-      loadConversation(selectedPeerId);
-    }
-  };
+  const currentMessages = useMemo(() => {
+    return messagesByPeer[selectedPeerId] || [];
+  }, [messagesByPeer, selectedPeerId]);
 
   const filteredThreads = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q ? threads.filter((t) => t.name.toLowerCase().includes(q)) : threads;
+    const keyword = query.trim().toLowerCase();
+
+    if (!keyword) return threads;
+
+    return threads.filter((thread) =>
+      String(thread.name || "").toLowerCase().includes(keyword)
+    );
   }, [threads, query]);
 
-  const currentThread = selectedPeerId
-    ? threads.find((t) => t.peerId === selectedPeerId)
-    : null;
+  const loadChat = async (silent = false) => {
+    if (!token) {
+      setLoading(false);
+      setRefreshing(false);
+      setLoadError("Login required.");
+      return;
+    }
 
-  if (!token || !myId) {
+    try {
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setLoadError("");
+      setSendError("");
+
+      const profileRes = await fetchWithAuth(
+        `${API_BASE_URL}/api/user/me`,
+        token
+      );
+
+      if (!profileRes.response.ok) {
+        throw new Error(
+          profileRes.result?.message || "Could not load your profile."
+        );
+      }
+
+      const user = extractUser(profileRes.result);
+
+      if (!user) {
+        throw new Error("Profile data was not returned from the server.");
+      }
+
+      const currentUserId = getId(user);
+
+      const [connections, messageActions] = await Promise.all([
+        loadAllActions({
+          token,
+          type: "connection_request",
+          status: "accepted",
+          box: "all",
+        }),
+        loadAllActions({
+          token,
+          type: "message",
+          box: "all",
+        }),
+      ]);
+
+      const groupedMessages = groupMessagesByPeer(messageActions, currentUserId);
+
+      const connectedThreads = connections
+        .map((connection) => {
+          const peer = getPeerFromConnection(connection, currentUserId);
+          const peerId = getId(peer);
+
+          if (!peerId) return null;
+
+          const peerMessages = groupedMessages[peerId] || [];
+          const lastMessage = peerMessages[peerMessages.length - 1] || null;
+
+          return {
+            peerId,
+            connectionId: getId(connection),
+            peer,
+            name: getPersonName(peer),
+            avatar: getPersonAvatar(peer),
+            age: peer?.age || null,
+            gender: peer?.gender || null,
+            religion: peer?.religion || null,
+            profession: peer?.profession || null,
+            location:
+              peer?.current_city ||
+              peer?.current_district ||
+              peer?.current_division ||
+              "",
+            isVerified: Boolean(peer?.isVerified),
+            connectedAt:
+              connection?.responded_at ||
+              connection?.updatedAt ||
+              connection?.createdAt,
+            lastMessage: lastMessage?.text || "Start conversation",
+            lastAt:
+              lastMessage?.time ||
+              connection?.responded_at ||
+              connection?.updatedAt ||
+              connection?.createdAt,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0));
+
+      setMe(user);
+      setMessagesByPeer(groupedMessages);
+      setThreads(connectedThreads);
+
+      setSelectedPeerId((prev) => {
+        if (prev && connectedThreads.some((thread) => thread.peerId === prev)) {
+          return prev;
+        }
+
+        return connectedThreads[0]?.peerId || "";
+      });
+    } catch (error) {
+      setLoadError(error?.message || "Could not load inbox.");
+      setThreads([]);
+      setMessagesByPeer({});
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadChat(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  }, [selectedPeerId, currentMessages.length]);
+
+  const handleSend = async () => {
+    const text = input.trim();
+
+    if (!text || !selectedPeerId || sending) return;
+
+    const tempId = `temp-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const previousMessages = messagesByPeer[selectedPeerId] || [];
+    const previousThread = threads.find((item) => item.peerId === selectedPeerId);
+
+    const optimistic = {
+      id: tempId,
+      peerId: selectedPeerId,
+      fromId: myId,
+      toId: selectedPeerId,
+      text,
+      time: now,
+      isMine: true,
+      status: "sending",
+      raw: null,
+    };
+
+    try {
+      setSending(true);
+      setInput("");
+      setSendError("");
+
+      setMessagesByPeer((prev) => ({
+        ...prev,
+        [selectedPeerId]: [...(prev[selectedPeerId] || []), optimistic],
+      }));
+
+      setThreads((prev) =>
+        prev
+          .map((thread) =>
+            thread.peerId === selectedPeerId
+              ? {
+                  ...thread,
+                  lastMessage: text,
+                  lastAt: now,
+                }
+              : thread
+          )
+          .sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0))
+      );
+
+      const { response, result } = await fetchWithAuth(
+        `${API_BASE_URL}/api/matrimony-actions/messages/${selectedPeerId}`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            message: text,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Message could not be sent.");
+      }
+
+      const savedAction =
+        result?.request ||
+        result?.action ||
+        result?.item ||
+        result?.message_item ||
+        null;
+
+      const savedMessage = savedAction
+        ? buildMessage(savedAction, myId)
+        : {
+            ...optimistic,
+            id: `sent-${Date.now()}`,
+            status: "sent",
+          };
+
+      setLimitInfo(result?.limit || null);
+
+      setMessagesByPeer((prev) => ({
+        ...prev,
+        [selectedPeerId]: (prev[selectedPeerId] || []).map((item) =>
+          item.id === tempId ? savedMessage : item
+        ),
+      }));
+    } catch (error) {
+      setMessagesByPeer((prev) => ({
+        ...prev,
+        [selectedPeerId]: previousMessages,
+      }));
+
+      setThreads((prev) =>
+        prev.map((thread) =>
+          thread.peerId === selectedPeerId && previousThread
+            ? previousThread
+            : thread
+        )
+      );
+
+      setSendError(error?.message || "Message could not be sent.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading) {
+    return <InboxLoading />;
+  }
+
+  if (!token || loadError) {
     return (
-      <div className="min-h-screen grid place-items-center text-slate-200">
-        <div className="p-8 rounded-2xl bg-slate-800/60 border border-white/10">
-          <p className="text-lg">Please sign in to use chat.</p>
-          <p className="text-sm opacity-70 mt-2">
-            Tip: ensure Redux <code>state.user.currentUser</code> or localStorage has either a token or a user object with <code>_id</code>.
+      <div className="mt-16 flex h-[calc(100dvh-190px)] min-h-[620px] items-center justify-center rounded-[1.5rem] border border-rose-100 bg-rose-50 p-5 sm:mt-20">
+        <div className="max-w-md text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-rose-600 shadow-sm">
+            <FaExclamationCircle />
+          </div>
+
+          <h3 className="mt-4 text-base font-semibold text-slate-900">
+            Inbox unavailable
+          </h3>
+
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {loadError || "Please login again to use inbox."}
           </p>
+
+          {token ? (
+            <button
+              type="button"
+              onClick={() => loadChat(false)}
+              className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white transition hover:bg-rose-700"
+            >
+              <FaSyncAlt className="text-xs" />
+              Try Again
+            </button>
+          ) : null}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full bg-[radial-gradient(1000px_600px_at_10%_-10%,#6ea8ff20_0%,transparent_60%),radial-gradient(800px_500px_at_90%_10%,#a78bfa1a_0%,transparent_60%),linear-gradient(180deg,#0f172a_0%,#0b1220_100%)] text-slate-100">
-      <div className="mx-auto max-w-[1440px] p-6 sm:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-14 min-h-[78vh]">
-          {/* Sidebar */}
-          <motion.aside
-            initial={{ x: -20, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 200, damping: 24 }}
-            className="lg:col-span-1 rounded-3xl backdrop-blur-xl bg-white/5 border border-white/10 shadow-2xl overflow-hidden h-[78vh]"
-          >
-            {/* Profile / Controls */}
-            <div className="flex items-center justify-between p-5">
-              <div className="flex items-center gap-4">
-                <Avatar name={myName || "You"} color="bg-gradient-to-br from-sky-500 to-indigo-600" />
-                <div>
-                  <p className="font-semibold text-lg">{myName || "You"}</p>
-                  <p className="text-xs text-slate-400">Online</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-slate-300">
-                <button className="p-2 hover:bg-white/10 rounded-full"><Bell className="w-5 h-5" /></button>
-                <button className="p-2 hover:bg-white/10 rounded-full"><Settings className="w-5 h-5" /></button>
-                <button className="p-2 hover:bg-white/10 rounded-full"><LogOut className="w-5 h-5" /></button>
-              </div>
-            </div>
+    <div className="mt-16 h-[calc(100dvh-190px)] min-h-[620px] overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm sm:mt-20">
+      <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className="flex h-[255px] min-h-0 flex-col border-b border-slate-200 bg-white lg:h-full lg:border-b-0 lg:border-r">
+          <div className="shrink-0 border-b border-slate-100 p-3 sm:p-4">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <FaSearch className="text-sm text-slate-400" />
 
-            {/* Search */}
-            <div className="px-5 pb-3">
-              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                <Search className="w-4 h-4 text-slate-300" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search chats"
-                  className="bg-transparent outline-none placeholder:text-slate-400 text-sm w-full"
-                />
-                <button className="p-1.5 rounded-xl hover:bg-white/10"><Plus className="w-4 h-4" /></button>
-              </div>
-            </div>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search chats"
+                className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+              />
 
-            {/* Threads */}
-            <div className="h-[calc(78vh-140px)] overflow-y-auto px-3 pb-4">
-              {filteredThreads.map((t) => (
-                <button
-                  key={t.peerId}
-                  onClick={() => {
-                    setSelectedPeerId(t.peerId);
-                    setShouldAutoscroll(false);
-                  }}
-                  className={`w-full flex items-center gap-4 rounded-2xl px-4 py-4 my-1.5 text-left transition ${
-                    selectedPeerId === t.peerId ? "bg-white/15" : "hover:bg-white/5"
-                  }`}
-                >
-                  <Avatar name={t.name} color={t.color} size="w-14 h-14" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium truncate">{t.name}</p>
-                      <span className="text-[10px] text-slate-400 shrink-0 ml-2">
-                        {t.lastAt ? fmtTime(t.lastAt) : "—"}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-300 line-clamp-1">{t.last || " "}</p>
-                  </div>
-                  {t.unread > 0 && (
-                    <span className="ml-2 inline-grid place-items-center text-[10px] font-semibold w-6 h-6 rounded-full bg-rose-500">
-                      {t.unread}
-                    </span>
-                  )}
-                </button>
-              ))}
-              {filteredThreads.length === 0 && (
-                <div className="px-4 py-3 text-slate-400 text-sm">No conversations.</div>
-              )}
+              <button
+                type="button"
+                onClick={() => loadChat(true)}
+                disabled={refreshing}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {refreshing ? (
+                  <FaSpinner className="animate-spin text-xs" />
+                ) : (
+                  <FaSyncAlt className="text-xs" />
+                )}
+              </button>
             </div>
-          </motion.aside>
+          </div>
 
-          {/* Chat Area */}
-          <motion.section
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 200, damping: 24 }}
-            className="lg:col-span-2 rounded-3xl backdrop-blur-xl bg-white/5 border border-white/10 shadow-2xl overflow-hidden flex flex-col h-[78vh]"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-white/10 bg-white/5">
-              {selectedPeerId ? (
-                <>
-                  <div className="flex items-center gap-4">
-                    <Avatar
-                      name={nameForPeer(selectedPeerId)}
-                      color="bg-gradient-to-br from-emerald-500 to-cyan-500"
-                    />
-                    <div>
-                      <h3 className="font-semibold text-lg">{nameForPeer(selectedPeerId)}</h3>
-                      <div className="text-xs text-slate-300 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span>Active now</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-200">
-                    <button className="px-4 py-2 rounded-xl hover:bg-white/10 inline-flex items-center gap-2">
-                      <Phone className="w-4 h-4" /> <span className="hidden sm:inline">Call</span>
-                    </button>
-                    <button className="px-4 py-2 rounded-xl hover:bg-white/10 inline-flex items-center gap-2">
-                      <Video className="w-4 h-4" /> <span className="hidden sm:inline">Video</span>
-                    </button>
-                    <button className="p-2 rounded-xl hover:bg-white/10">
-                      <MoreVertical className="w-5 h-5" />
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-slate-300">Select a conversation</div>
-              )}
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4 bg-[radial-gradient(600px_200px_at_50%_0%,#ffffff10_0%,transparent_100%)]">
-              <AnimatePresence initial={false}>
-                {currentMessages.map((m) => (
-                  <Bubble key={m.id} message={m} isMe={m.from === "You"} />
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {filteredThreads.length > 0 ? (
+              <div className="space-y-2">
+                {filteredThreads.map((thread) => (
+                  <ThreadButton
+                    key={thread.peerId}
+                    thread={thread}
+                    active={selectedPeerId === thread.peerId}
+                    onClick={() => {
+                      setSelectedPeerId(thread.peerId);
+                      setSendError("");
+                    }}
+                  />
                 ))}
-              </AnimatePresence>
-              {isTyping && (
-                <div className="mt-2">
-                  <TypingDots />
+              </div>
+            ) : (
+              <div className="rounded-[1.4rem] border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
+                  <FaRegCommentDots />
                 </div>
-              )}
-              <div ref={messageEndRef} />
-            </div>
 
-            {/* Composer */}
-            <div className="p-4 border-t border-white/10 bg-gradient-to-b from-white/5 to-white/0">
-              <div className="flex items-end gap-3">
-                <button className="p-3 rounded-xl hover:bg-white/10">
-                  <Paperclip className="w-5 h-5" />
-                </button>
-                <button className="p-3 rounded-xl hover:bg-white/10">
-                  <ImageIcon className="w-5 h-5" />
-                </button>
-                <div className="flex-1">
-                  <div className="rounded-2xl border border-white/10 bg-white/10 focus-within:bg-white/15 transition px-4 py-3">
-                    <textarea
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      rows={1}
-                      placeholder={selectedPeerId ? "Write a message…" : "Select a conversation to start"}
-                      disabled={!selectedPeerId}
-                      className="w-full bg-transparent outline-none resize-none placeholder:text-slate-400 text-slate-50 text-base disabled:opacity-50"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSend();
-                        }
-                      }}
-                    />
-                    <div className="mt-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <button className="p-2.5 rounded-xl hover:bg-white/10">
-                          <Smile className="w-5 h-5" />
-                        </button>
-                        <button
-                          onMouseDown={() => setIsTyping(true)}
-                          onMouseUp={() => setIsTyping(false)}
-                          className={`p-2.5 rounded-xl hover:bg-white/10 ${isTyping ? "bg-rose-500/20" : ""}`}
-                          title="Hold to simulate typing"
-                        >
-                          <Mic className={`w-5 h-5 ${isTyping ? "text-rose-400 animate-pulse" : ""}`} />
-                        </button>
-                      </div>
-                      <motion.button
-                        whileTap={{ scale: 0.97 }}
-                        onClick={handleSend}
-                        disabled={!selectedPeerId || !input.trim()}
-                        className="inline-flex items-center gap-2 bg-gradient-to-br from-sky-500 to-indigo-600 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-sky-500/20 border border-white/10 disabled:opacity-50"
-                      >
-                        <Send className="w-4 h-4" />
-                        <span className="hidden sm:inline">Send</span>
-                      </motion.button>
+                <h3 className="mt-4 text-sm font-semibold text-slate-900">
+                  No chats found
+                </h3>
+
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Accepted connections will appear here.
+                </p>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <main className="flex h-full min-h-0 flex-col bg-white">
+          {currentThread ? (
+            <>
+              <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-white p-3 sm:p-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar user={currentThread.peer} size="h-11 w-11" />
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate text-base font-semibold text-slate-900">
+                        {currentThread.name}
+                      </h3>
+
+                      {currentThread.isVerified ? (
+                        <FaCheckCircle className="shrink-0 text-xs text-emerald-500" />
+                      ) : null}
                     </div>
+
+                    <p className="mt-1 truncate text-xs font-medium text-slate-500">
+                      {[
+                        currentThread.location,
+                        cleanText(currentThread.profession),
+                      ]
+                        .filter(Boolean)
+                        .join(" • ") || "Connected"}
+                    </p>
                   </div>
                 </div>
+
+                <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Connected
+                </span>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbf7f4] px-4 py-5 sm:px-6">
+                {currentMessages.length > 0 ? (
+                  <div className="space-y-3">
+                    {currentMessages.map((message) => (
+                      <MessageBubble key={message.id} message={message} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex h-full min-h-[280px] items-center justify-center">
+                    <div className="max-w-sm text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-rose-600 shadow-sm">
+                        <FaRegCommentDots />
+                      </div>
+
+                      <h3 className="mt-4 text-base font-semibold text-slate-900">
+                        No messages yet
+                      </h3>
+
+                      <p className="mt-2 text-sm leading-6 text-slate-500">
+                        Send your first message to start the chat.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messageEndRef} />
+              </div>
+
+              <div className="shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4">
+                {sendError ? (
+                  <div className="mb-3 flex items-center gap-2 rounded-xl border border-rose-100 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700">
+                    <FaTimesCircle className="shrink-0" />
+                    <span>{sendError}</span>
+                  </div>
+                ) : null}
+
+                {!membership.can_send_messages ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm">
+                        <FaCrown />
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-900">
+                          Messaging is locked
+                        </h4>
+
+                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                          Your current membership plan does not allow sending
+                          messages.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-end gap-3">
+                    <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-rose-200 focus-within:bg-white focus-within:ring-4 focus-within:ring-rose-50">
+                      <textarea
+                        value={input}
+                        onChange={(event) => setInput(event.target.value)}
+                        rows={1}
+                        maxLength={2000}
+                        placeholder="Write a message..."
+                        disabled={sending}
+                        className="max-h-24 min-h-[28px] w-full resize-none bg-transparent text-sm font-medium leading-6 text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            handleSend();
+                          }
+                        }}
+                      />
+
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-[11px] font-medium text-slate-400">
+                          {input.length}/2000
+                        </p>
+
+                        {limitInfo ? (
+                          <p className="text-[11px] font-medium text-slate-400">
+                            {limitInfo.limit === -1
+                              ? "Unlimited"
+                              : `${limitInfo.remaining ?? 0} remaining`}
+                          </p>
+                        ) : (
+                          <p className="text-[11px] font-medium text-slate-400">
+                            Enter to send
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSend}
+                      disabled={!input.trim() || sending}
+                      className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-2xl bg-rose-600 px-5 text-sm font-semibold text-white shadow-lg shadow-rose-100 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {sending ? (
+                        <FaSpinner className="animate-spin text-xs" />
+                      ) : (
+                        <FaPaperPlane className="text-xs" />
+                      )}
+
+                      <span className="hidden sm:inline">Send</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+              <div className="max-w-md text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-rose-50 text-rose-600">
+                  <FaRegCommentDots className="text-xl" />
+                </div>
+
+                <h3 className="mt-5 text-xl font-semibold tracking-tight text-slate-900">
+                  Select a chat
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Accepted connections will show on the left side.
+                </p>
               </div>
             </div>
-          </motion.section>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function Avatar({ user, size = "h-11 w-11" }) {
+  const name = getPersonName(user);
+  const avatar = getPersonAvatar(user);
+
+  return (
+    <div
+      className={`relative shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 ${size}`}
+    >
+      <img src={avatar} alt={name} className="h-full w-full object-cover" />
+    </div>
+  );
+}
+
+function ThreadButton({ thread, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-[1.25rem] border p-3 text-left transition ${
+        active
+          ? "border-rose-200 bg-rose-50 shadow-sm"
+          : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <Avatar user={thread.peer} />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-semibold text-slate-900">
+              {thread.name}
+            </p>
+
+            {thread.isVerified ? (
+              <FaCheckCircle className="shrink-0 text-xs text-emerald-500" />
+            ) : null}
+          </div>
+
+          <p className="mt-1 line-clamp-1 text-xs font-medium text-slate-500">
+            {thread.lastMessage}
+          </p>
+        </div>
+
+        <span className="shrink-0 text-[10px] font-semibold text-slate-400">
+          {formatTime(thread.lastAt)}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function MessageBubble({ message }) {
+  return (
+    <div className={`flex ${message.isMine ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[82%] rounded-2xl px-4 py-3 shadow-sm sm:max-w-[70%] ${
+          message.isMine
+            ? "rounded-br-md bg-rose-600 text-white"
+            : "rounded-bl-md border border-slate-200 bg-white text-slate-800"
+        }`}
+      >
+        <p className="whitespace-pre-wrap text-sm leading-6">{message.text}</p>
+
+        <div
+          className={`mt-2 flex items-center justify-end gap-1 text-[10px] font-medium ${
+            message.isMine ? "text-white/75" : "text-slate-400"
+          }`}
+        >
+          <span>{formatTime(message.time)}</span>
+
+          {message.isMine ? (
+            <span className="inline-flex items-center gap-0.5">
+              <FaCheck className="text-[9px]" />
+              {message.status === "sending" ? "Sending" : "Sent"}
+            </span>
+          ) : null}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Subtle background sparkles */}
-      <div className="pointer-events-none fixed inset-0">
-        {[...Array(30)].map((_, i) => (
-          <motion.span
-            key={i}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.4, 0], y: [0, -10, 0] }}
-            transition={{ repeat: Infinity, duration: 6 + Math.random() * 6, delay: Math.random() * 5 }}
-            className="absolute w-1 h-1 rounded-full bg-white/20"
-            style={{ left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%` }}
-          />
-        ))}
+function InboxLoading() {
+  return (
+    <div className="mt-16 h-[calc(100dvh-190px)] min-h-[620px] overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white sm:mt-20">
+      <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="flex h-[255px] min-h-0 flex-col border-b border-slate-200 p-4 lg:h-full lg:border-b-0 lg:border-r">
+          <div className="h-12 shrink-0 animate-pulse rounded-2xl bg-slate-100" />
+
+          <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-hidden">
+            {[1, 2, 3, 4, 5, 6].map((item) => (
+              <div
+                key={item}
+                className="h-16 animate-pulse rounded-[1.25rem] bg-slate-100"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="h-20 shrink-0 border-b border-slate-100 p-4">
+            <div className="h-12 animate-pulse rounded-2xl bg-slate-100" />
+          </div>
+
+          <div className="min-h-0 flex-1 bg-[#fbf7f4] p-5">
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((item) => (
+                <div
+                  key={item}
+                  className={`h-14 w-2/3 animate-pulse rounded-2xl bg-white ${
+                    item % 2 === 0 ? "ml-auto" : ""
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="h-[92px] shrink-0 border-t border-slate-100 p-4">
+            <div className="h-14 animate-pulse rounded-2xl bg-slate-100" />
+          </div>
+        </div>
       </div>
     </div>
   );

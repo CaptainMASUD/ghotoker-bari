@@ -1,4 +1,5 @@
 import User from "../models/user.model.js";
+import Membership from "../models/membership.model.js";
 import mongoose from "mongoose";
 import uploadCloudinary from "../utils/cloudinary.js";
 
@@ -27,11 +28,21 @@ const DEFAULT_MODERATOR_PERMISSIONS = [
   ADMIN_PERMISSIONS.REJECT_USERS,
 ];
 
-const FULL_SAFE_SELECT =
-  "-password -nid -passport -present_address -permanent_address -family.father_name -family.mother_name";
+/*
+  Admin/moderator can see full normal-user verification data.
+  Password is never returned.
+*/
+const ADMIN_FULL_USER_SELECT = `
+  -password
+  +nid
+  +passport
+  +present_address
+  +permanent_address
+  +family.father_name
+  +family.mother_name
+`;
 
-const ADMIN_SAFE_SELECT =
-  "-password -nid -passport -present_address -permanent_address -family.father_name -family.mother_name";
+const ADMIN_SAFE_SELECT = "-password";
 
 /* =====================================================
    BASIC HELPERS
@@ -56,6 +67,8 @@ const parseBoolean = (value) => {
   if (typeof value === "boolean") return value;
   if (value === "true") return true;
   if (value === "false") return false;
+  if (value === "1" || value === 1) return true;
+  if (value === "0" || value === 0) return false;
   return Boolean(value);
 };
 
@@ -146,6 +159,24 @@ const uploadProfilePhotos = async (files = []) => {
   return uploadedPhotos;
 };
 
+const assignDefaultFreeMembership = async (user) => {
+  if (!user || user.membership) return user;
+
+  let freePlan = await Membership.findOne({ slug: "free", is_default: true });
+
+  if (!freePlan) {
+    freePlan = await Membership.ensureDefaultFreePlan();
+  }
+
+  user.membership = freePlan._id;
+  user.membership_started_at = new Date();
+  user.membership_expiry = null;
+  user.membership_status = "free";
+
+  await user.save();
+  return user;
+};
+
 /* =====================================================
    PERMISSION HELPERS
 ===================================================== */
@@ -157,7 +188,10 @@ const isSuperAdmin = (admin) => {
 const hasPermission = (admin, permission) => {
   if (!admin) return false;
   if (admin.role === "superadmin") return true;
-  return Array.isArray(admin.permissions) && admin.permissions.includes(permission);
+
+  return (
+    Array.isArray(admin.permissions) && admin.permissions.includes(permission)
+  );
 };
 
 const requirePermission = (admin, permission) => {
@@ -230,41 +264,70 @@ const computeProfileCompleteness = (user) => {
 ===================================================== */
 
 const buildMembershipStatus = (user) => {
-  const m = user?.membership || null;
-  const expiry = user?.membership_expiry ? new Date(user.membership_expiry) : null;
+  const membership = user?.membership || null;
+  const expiry = user?.membership_expiry
+    ? new Date(user.membership_expiry)
+    : null;
   const now = new Date();
-  const active = Boolean(m && expiry && expiry > now);
+
+  const isFreePlan = Boolean(
+    membership?.slug === "free" || membership?.is_free || membership?.is_default
+  );
+
+  const isPaidActive = Boolean(
+    membership &&
+      !isFreePlan &&
+      user?.membership_status === "active" &&
+      expiry &&
+      expiry > now
+  );
+
+  const isFreeActive = Boolean(membership && isFreePlan);
+  const active = isFreeActive || isPaidActive;
+  const features = membership?.features || {};
 
   return {
-    type: m?.name || "free",
+    plan_id: membership?._id || null,
+    name: membership?.name || "Free Plan",
+    slug: membership?.slug || "free",
+    status: user?.membership_status || (isFreeActive ? "free" : "expired"),
     active,
+    is_free: isFreeActive,
+    is_paid: isPaidActive,
+    started_at: user?.membership_started_at || null,
     expiry: user?.membership_expiry || null,
-    can_chat: Boolean(active && m?.can_chat),
-    can_view_full_profiles: Boolean(active && m?.can_view_full_profiles),
-    message_limit_per_day: active ? m?.message_limit_per_day ?? 0 : 0,
     days_left:
-      active && expiry
+      isPaidActive && expiry
         ? Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
-        : 0,
+        : null,
+    features,
   };
 };
 
 const buildFullUser = (userDoc) => {
-  const user = userDoc?.toObject ? userDoc.toObject({ virtuals: true }) : userDoc;
+  const user = userDoc?.toObject
+    ? userDoc.toObject({ virtuals: true })
+    : userDoc;
 
-  return {
+  const response = {
     ...user,
     full_name: `${user?.first_name || ""} ${user?.last_name || ""}`.trim(),
     age: calculateAge(user?.dob),
     membership_status: buildMembershipStatus(user),
     profile_completeness: computeProfileCompleteness(user),
   };
+
+  delete response.password;
+
+  return response;
 };
 
 const buildAdminUser = (userDoc) => {
-  const user = userDoc?.toObject ? userDoc.toObject({ virtuals: true }) : userDoc;
+  const user = userDoc?.toObject
+    ? userDoc.toObject({ virtuals: true })
+    : userDoc;
 
-  return {
+  const response = {
     _id: user._id,
     username: user.username,
     first_name: user.first_name,
@@ -283,6 +346,10 @@ const buildAdminUser = (userDoc) => {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
+
+  delete response.password;
+
+  return response;
 };
 
 /* =====================================================
@@ -357,7 +424,9 @@ const blockedAdminUserUpdateFields = [
   "admin_status",
   "verifiedBy",
   "membership",
+  "membership_started_at",
   "membership_expiry",
+  "membership_status",
   "profile_views_count",
   "shortlisted_by_count",
   "email_address",
@@ -509,7 +578,6 @@ const buildAdminUserUpdatePayload = (body) => {
 
 /* =====================================================
    ADMIN CRUD: CREATE NORMAL USER
-   POST /api/admin/users
 ===================================================== */
 
 export const createUserByAdmin = async (req, res) => {
@@ -556,7 +624,6 @@ export const createUserByAdmin = async (req, res) => {
     }
 
     const normalizedEmail = normalizeEmail(email_address);
-
     const exists = await User.exists({ email_address: normalizedEmail });
 
     if (exists) {
@@ -566,8 +633,11 @@ export const createUserByAdmin = async (req, res) => {
     }
 
     const profilePhotos = await uploadProfilePhotos(req.files);
+    const extraPayload = buildAdminUserUpdatePayload(req.body);
+    const verified = parseBoolean(isVerified);
 
     const user = new User({
+      ...extraPayload,
       role: "user",
       first_name: normalizeString(first_name),
       last_name: normalizeString(last_name),
@@ -583,15 +653,21 @@ export const createUserByAdmin = async (req, res) => {
       current_city,
       profession,
       highest_education,
-      profile_photos: profilePhotos,
-      profile_status,
+      profile_photos:
+        profilePhotos.length > 0
+          ? profilePhotos
+          : normalizeArray(req.body.profile_photos),
+      profile_status: verified ? "approved" : profile_status,
       account_status,
-      isVerified: parseBoolean(isVerified),
-      verifiedAt: parseBoolean(isVerified) ? new Date() : null,
-      verifiedBy: parseBoolean(isVerified) ? admin._id : null,
+      isVerified: verified,
+      verifiedAt: verified ? new Date() : null,
+      verifiedBy: verified ? admin._id : null,
       verification: {
-        verification_status: parseBoolean(isVerified) ? "approved" : "pending",
-        biodata_verified: parseBoolean(isVerified),
+        ...(extraPayload.verification || {}),
+        verification_status: verified ? "approved" : "pending",
+        biodata_verified: verified,
+        email_verified: verified,
+        phone_verified: verified,
       },
       last_active_at: new Date(),
     });
@@ -599,9 +675,10 @@ export const createUserByAdmin = async (req, res) => {
     user.profile_completeness = computeProfileCompleteness(user);
 
     await user.save();
+    await assignDefaultFreeMembership(user);
 
     const savedUser = await User.findById(user._id)
-      .select(FULL_SAFE_SELECT)
+      .select(ADMIN_FULL_USER_SELECT)
       .populate("membership")
       .lean({ virtuals: true });
 
@@ -619,7 +696,6 @@ export const createUserByAdmin = async (req, res) => {
 
 /* =====================================================
    ADMIN CRUD: GET USERS
-   GET /api/admin/users?limit=20&cursor=
 ===================================================== */
 
 export const getUsersForAdmin = async (req, res) => {
@@ -655,16 +731,26 @@ export const getUsersForAdmin = async (req, res) => {
 
     applyCursor(query, cursor);
 
-    if (profile_status) query.profile_status = profile_status;
-    if (account_status) query.account_status = account_status;
+    if (profile_status && profile_status !== "all") {
+      query.profile_status = profile_status;
+    }
+
+    if (account_status && account_status !== "all") {
+      query.account_status = account_status;
+    }
+
     if (isVerified === "true") query.isVerified = true;
     if (isVerified === "false") query.isVerified = false;
-    if (verification_status) query["verification.verification_status"] = verification_status;
-    if (gender) query.gender = gender;
-    if (religion) query.religion = religion;
-    if (division) query.current_division = division;
-    if (district) query.current_district = district;
-    if (city) query.current_city = city;
+
+    if (verification_status && verification_status !== "all") {
+      query["verification.verification_status"] = verification_status;
+    }
+
+    if (gender && gender !== "all") query.gender = gender;
+    if (religion && religion !== "all") query.religion = religion;
+    if (division && division !== "all") query.current_division = division;
+    if (district && district !== "all") query.current_district = district;
+    if (city && city !== "all") query.current_city = city;
 
     if (search) {
       query.$text = {
@@ -673,7 +759,7 @@ export const getUsersForAdmin = async (req, res) => {
     }
 
     const rows = await User.find(query)
-      .select(FULL_SAFE_SELECT)
+      .select(ADMIN_FULL_USER_SELECT)
       .sort({ _id: -1 })
       .limit(perPage + 1)
       .populate("membership")
@@ -699,7 +785,6 @@ export const getUsersForAdmin = async (req, res) => {
 
 /* =====================================================
    ADMIN CRUD: GET SINGLE USER
-   GET /api/admin/users/:id
 ===================================================== */
 
 export const getUserByIdForAdmin = async (req, res) => {
@@ -723,7 +808,7 @@ export const getUserByIdForAdmin = async (req, res) => {
       _id: id,
       role: "user",
     })
-      .select(FULL_SAFE_SELECT)
+      .select(ADMIN_FULL_USER_SELECT)
       .populate("membership")
       .lean({ virtuals: true });
 
@@ -746,7 +831,6 @@ export const getUserByIdForAdmin = async (req, res) => {
 
 /* =====================================================
    ADMIN CRUD: UPDATE NORMAL USER
-   PATCH /api/admin/users/:id
 ===================================================== */
 
 export const updateUserByAdmin = async (req, res) => {
@@ -815,7 +899,7 @@ export const updateUserByAdmin = async (req, res) => {
         runValidators: true,
       }
     )
-      .select(FULL_SAFE_SELECT)
+      .select(ADMIN_FULL_USER_SELECT)
       .populate("membership");
 
     if (!updatedUser) {
@@ -838,7 +922,7 @@ export const updateUserByAdmin = async (req, res) => {
         runValidators: true,
       }
     )
-      .select(FULL_SAFE_SELECT)
+      .select(ADMIN_FULL_USER_SELECT)
       .populate("membership")
       .lean({ virtuals: true });
 
@@ -856,7 +940,6 @@ export const updateUserByAdmin = async (req, res) => {
 
 /* =====================================================
    ADMIN CRUD: DELETE NORMAL USER
-   DELETE /api/admin/users/:id?hard=true
 ===================================================== */
 
 export const deleteUserByAdmin = async (req, res) => {
@@ -919,7 +1002,7 @@ export const deleteUserByAdmin = async (req, res) => {
         runValidators: true,
       }
     )
-      .select(FULL_SAFE_SELECT)
+      .select(ADMIN_FULL_USER_SELECT)
       .populate("membership")
       .lean({ virtuals: true });
 
@@ -943,7 +1026,6 @@ export const deleteUserByAdmin = async (req, res) => {
 
 /* =====================================================
    ADMIN: VERIFY / REJECT USER
-   PATCH /api/admin/users/:id/verify
 ===================================================== */
 
 export const verifyUserProfile = async (req, res) => {
@@ -1019,7 +1101,7 @@ export const verifyUserProfile = async (req, res) => {
         runValidators: true,
       }
     )
-      .select(FULL_SAFE_SELECT)
+      .select(ADMIN_FULL_USER_SELECT)
       .populate("membership")
       .lean({ virtuals: true });
 
@@ -1045,7 +1127,6 @@ export const verifyUserProfile = async (req, res) => {
 
 /* =====================================================
    ADMIN: UPDATE USER STATUS
-   PATCH /api/admin/users/:id/status
 ===================================================== */
 
 export const updateUserAccountStatus = async (req, res) => {
@@ -1072,23 +1153,29 @@ export const updateUserAccountStatus = async (req, res) => {
       });
     }
 
+    const statusPayload = {
+      account_status,
+    };
+
+    if (account_status === "suspended" || account_status === "deleted") {
+      statusPayload.profile_status = "hidden";
+      statusPayload["privacy.allow_profile_view"] = false;
+    }
+
     const user = await User.findOneAndUpdate(
       {
         _id: id,
         role: "user",
       },
       {
-        $set: {
-          account_status,
-          profile_status: account_status === "suspended" ? "hidden" : undefined,
-        },
+        $set: statusPayload,
       },
       {
         new: true,
         runValidators: true,
       }
     )
-      .select(FULL_SAFE_SELECT)
+      .select(ADMIN_FULL_USER_SELECT)
       .populate("membership")
       .lean({ virtuals: true });
 
@@ -1112,7 +1199,6 @@ export const updateUserAccountStatus = async (req, res) => {
 
 /* =====================================================
    SUPERADMIN: CREATE MODERATOR / SUPERADMIN
-   POST /api/admin/staff
 ===================================================== */
 
 export const createAdminUser = async (req, res) => {
@@ -1184,6 +1270,8 @@ export const createAdminUser = async (req, res) => {
           ? permissions
           : DEFAULT_MODERATOR_PERMISSIONS;
 
+    const verified = parseBoolean(isVerified);
+
     const newAdmin = new User({
       role,
       username: normalizedUsername,
@@ -1193,14 +1281,15 @@ export const createAdminUser = async (req, res) => {
       phone_number: phone_number ? normalizePhone(phone_number) : undefined,
       password,
       permissions: finalPermissions,
-      isVerified: parseBoolean(isVerified),
-      verifiedAt: parseBoolean(isVerified) ? new Date() : null,
-      verifiedBy: admin._id,
+      isVerified: verified,
+      verifiedAt: verified ? new Date() : null,
+      verifiedBy: verified ? admin._id : null,
       admin_status,
       account_status: "active",
       profile_status: "approved",
       verification: {
         email_verified: true,
+        phone_verified: Boolean(phone_number),
         biodata_verified: true,
         verification_status: "approved",
       },
@@ -1226,7 +1315,6 @@ export const createAdminUser = async (req, res) => {
 
 /* =====================================================
    SUPERADMIN: GET STAFF
-   GET /api/admin/staff
 ===================================================== */
 
 export const getAdminUsers = async (req, res) => {
@@ -1257,7 +1345,7 @@ export const getAdminUsers = async (req, res) => {
     applyCursor(query, cursor);
 
     if (role && ADMIN_ROLES.includes(role)) query.role = role;
-    if (admin_status) query.admin_status = admin_status;
+    if (admin_status && admin_status !== "all") query.admin_status = admin_status;
     if (isVerified === "true") query.isVerified = true;
     if (isVerified === "false") query.isVerified = false;
 
@@ -1293,7 +1381,6 @@ export const getAdminUsers = async (req, res) => {
 
 /* =====================================================
    SUPERADMIN: UPDATE STAFF
-   PATCH /api/admin/staff/:id
 ===================================================== */
 
 export const updateAdminUser = async (req, res) => {
@@ -1412,7 +1499,6 @@ export const updateAdminUser = async (req, res) => {
 
 /* =====================================================
    SUPERADMIN: VERIFY STAFF
-   PATCH /api/admin/staff/:id/verify
 ===================================================== */
 
 export const verifyAdminUser = async (req, res) => {
@@ -1483,7 +1569,6 @@ export const verifyAdminUser = async (req, res) => {
 
 /* =====================================================
    SUPERADMIN: UPDATE STAFF STATUS
-   PATCH /api/admin/staff/:id/status
 ===================================================== */
 
 export const updateAdminStatus = async (req, res) => {
@@ -1555,14 +1640,13 @@ export const updateAdminStatus = async (req, res) => {
 
 /* =====================================================
    SUPERADMIN: RESET STAFF PASSWORD
-   PATCH /api/admin/staff/:id/password
 ===================================================== */
 
 export const resetAdminPassword = async (req, res) => {
   try {
     const admin = req.admin || req.user;
     const { id } = req.params;
-    const { new_password } = req.body;
+    const newPassword = req.body.new_password || req.body.password;
 
     if (!isSuperAdmin(admin)) {
       return res.status(403).json({
@@ -1576,7 +1660,7 @@ export const resetAdminPassword = async (req, res) => {
       });
     }
 
-    if (!new_password || String(new_password).length < 6) {
+    if (!newPassword || String(newPassword).length < 6) {
       return res.status(400).json({
         message: "New password must be at least 6 characters long",
       });
@@ -1593,7 +1677,7 @@ export const resetAdminPassword = async (req, res) => {
       });
     }
 
-    target.password = new_password;
+    target.password = newPassword;
     await target.save();
 
     res.status(200).json({

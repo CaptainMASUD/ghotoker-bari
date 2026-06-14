@@ -3,6 +3,7 @@ import upload from "../middlewares/multer.js";
 
 import {
   registerUser,
+  registerSuperAdminPublic,
   loginUser,
   getMe,
   updateMe,
@@ -34,6 +35,13 @@ router.post("/register", upload.array("profile_photos"), registerUser);
 router.post("/login", loginUser);
 
 /* =====================================================
+   TEMP PUBLIC SUPERADMIN REGISTER
+   Remove after creating your first superadmin.
+===================================================== */
+
+router.post("/register-superadmin", registerSuperAdminPublic);
+
+/* =====================================================
    MY PROFILE
 ===================================================== */
 
@@ -45,7 +53,7 @@ router.patch("/profile-visibility", authenticateUser, updateProfileVisibility);
 
 /* =====================================================
    MATCH FINDING
-   Keep these before /:id/profile
+   Keep before /:id/profile
 ===================================================== */
 
 router.get("/matches", authenticateUser, getMyMatches);
@@ -53,10 +61,15 @@ router.get("/matches/recommended", authenticateUser, getRecommendedMatches);
 router.get("/matches/nearby", authenticateUser, getNearbyMatches);
 
 /* =====================================================
-   PUBLIC USER BROWSE / PROFILE
+   PUBLIC BROWSE / PROTECTED PROFILE DETAILS
 ===================================================== */
 
 router.get("/browse", optionalUserAuth, browseUsers);
-router.get("/:id/profile", optionalUserAuth, getUserPublicProfile);
+
+/*
+  Profile detail needs login.
+  Full detail depends on active membership + plan features.
+*/
+router.get("/:id/profile", authenticateUser, getUserPublicProfile);
 
 export default router;

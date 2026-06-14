@@ -729,9 +729,21 @@ const userSchema = new Schema(
       index: true,
     },
 
+    membership_started_at: {
+      type: Date,
+      default: null,
+    },
+
     membership_expiry: {
       type: Date,
       default: null,
+      index: true,
+    },
+
+    membership_status: {
+      type: String,
+      enum: ["free", "active", "expired", "cancelled"],
+      default: "free",
       index: true,
     },
 

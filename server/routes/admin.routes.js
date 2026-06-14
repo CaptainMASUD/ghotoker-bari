@@ -30,13 +30,13 @@ router.use(authenticateAdmin);
 
 router.post("/users", upload.array("profile_photos"), createUserByAdmin);
 router.get("/users", getUsersForAdmin);
+
+router.patch("/users/:id/verify", verifyUserProfile);
+router.patch("/users/:id/status", updateUserAccountStatus);
+
 router.get("/users/:id", getUserByIdForAdmin);
 router.patch("/users/:id", upload.array("profile_photos"), updateUserByAdmin);
 router.delete("/users/:id", deleteUserByAdmin);
-
-/* User verification/status */
-router.patch("/users/:id/verify", verifyUserProfile);
-router.patch("/users/:id/status", updateUserAccountStatus);
 
 /* =====================================================
    SUPERADMIN: STAFF MANAGEMENT
@@ -44,9 +44,11 @@ router.patch("/users/:id/status", updateUserAccountStatus);
 
 router.post("/staff", createAdminUser);
 router.get("/staff", getAdminUsers);
-router.patch("/staff/:id", updateAdminUser);
+
 router.patch("/staff/:id/verify", verifyAdminUser);
 router.patch("/staff/:id/status", updateAdminStatus);
 router.patch("/staff/:id/password", resetAdminPassword);
+
+router.patch("/staff/:id", updateAdminUser);
 
 export default router;

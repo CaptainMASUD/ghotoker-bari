@@ -43,6 +43,13 @@ const ADMIN_PERMISSIONS = [
   { value: "manage_moderators", label: "Manage Moderators" },
 ];
 
+const DEFAULT_MODERATOR_PERMISSIONS = [
+  "view_users",
+  "update_users",
+  "verify_users",
+  "reject_users",
+];
+
 const USER_EMPTY_FORM = {
   first_name: "",
   last_name: "",
@@ -71,7 +78,7 @@ const STAFF_EMPTY_FORM = {
   phone_number: "",
   password: "",
   role: "moderator",
-  permissions: ["view_users", "update_users", "verify_users", "reject_users"],
+  permissions: DEFAULT_MODERATOR_PERMISSIONS,
   isVerified: true,
   admin_status: "active",
 };
@@ -99,19 +106,23 @@ function getFullName(user) {
 function formatDate(value) {
   if (!value) return "N/A";
 
-  try {
-    return new Date(value).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return "N/A";
-  }
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "N/A";
+
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function getInitial(name) {
   return String(name || "U").trim().charAt(0).toUpperCase();
+}
+
+function cleanStatus(value) {
+  return String(value || "unknown").replaceAll("_", " ");
 }
 
 function badgeClass(type, value) {
@@ -119,8 +130,10 @@ function badgeClass(type, value) {
 
   if (type === "role") {
     if (val === "superadmin") return "border-rose-100 bg-rose-50 text-rose-700";
-    if (val === "moderator")
+    if (val === "moderator") {
       return "border-violet-100 bg-violet-50 text-violet-700";
+    }
+
     return "border-slate-100 bg-slate-50 text-slate-700";
   }
 
@@ -137,10 +150,6 @@ function badgeClass(type, value) {
   }
 
   return "border-slate-100 bg-slate-50 text-slate-700";
-}
-
-function cleanStatus(value) {
-  return String(value || "unknown").replaceAll("_", " ");
 }
 
 function buildQuery(filters, cursor) {
@@ -163,6 +172,8 @@ function buildQuery(filters, cursor) {
 export default function UsersPanel() {
   const currentUser = useSelector((state) => state.user?.currentUser);
   const token = currentUser?.token;
+  const loggedAdmin = currentUser?.user || currentUser?.admin || currentUser || {};
+  const isSuperAdmin = loggedAdmin?.role === "superadmin";
 
   const [activeSection, setActiveSection] = useState("users");
 
@@ -207,8 +218,10 @@ export default function UsersPanel() {
     data: null,
   });
 
+  const [createRole, setCreateRole] = useState("user");
   const [userForm, setUserForm] = useState(USER_EMPTY_FORM);
   const [staffForm, setStaffForm] = useState(STAFF_EMPTY_FORM);
+
   const [rejectReason, setRejectReason] = useState("");
   const [resetPasswordValue, setResetPasswordValue] = useState("");
 
@@ -292,14 +305,6 @@ export default function UsersPanel() {
     }
   };
 
-  const refreshCurrent = () => {
-    if (activeSection === "staff") {
-      loadStaff({ reset: true });
-    } else {
-      loadUsers({ reset: true });
-    }
-  };
-
   useEffect(() => {
     loadUsers({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -313,9 +318,26 @@ export default function UsersPanel() {
     setStaffFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  const openCreateUser = () => {
+  const openCreateAccount = (defaultRole = "user") => {
+    const safeRole = defaultRole !== "user" && !isSuperAdmin ? "user" : defaultRole;
+
+    setCreateRole(safeRole);
     setUserForm(USER_EMPTY_FORM);
-    setModal({ open: true, type: "userForm", mode: "create", data: null });
+    setStaffForm({
+      ...STAFF_EMPTY_FORM,
+      role: safeRole === "user" ? "moderator" : safeRole,
+      permissions:
+        safeRole === "superadmin"
+          ? ADMIN_PERMISSIONS.map((item) => item.value)
+          : DEFAULT_MODERATOR_PERMISSIONS,
+    });
+
+    setModal({
+      open: true,
+      type: "accountForm",
+      mode: "create",
+      data: null,
+    });
   };
 
   const openEditUser = (user) => {
@@ -340,7 +362,12 @@ export default function UsersPanel() {
       isVerified: Boolean(user.isVerified),
     });
 
-    setModal({ open: true, type: "userForm", mode: "edit", data: user });
+    setModal({
+      open: true,
+      type: "userForm",
+      mode: "edit",
+      data: user,
+    });
   };
 
   const openViewUser = async (user) => {
@@ -366,12 +393,12 @@ export default function UsersPanel() {
 
   const openRejectUser = (user) => {
     setRejectReason("");
-    setModal({ open: true, type: "rejectUser", mode: "reject", data: user });
-  };
-
-  const openCreateStaff = () => {
-    setStaffForm(STAFF_EMPTY_FORM);
-    setModal({ open: true, type: "staffForm", mode: "create", data: null });
+    setModal({
+      open: true,
+      type: "rejectUser",
+      mode: "reject",
+      data: user,
+    });
   };
 
   const openEditStaff = (admin) => {
@@ -391,7 +418,12 @@ export default function UsersPanel() {
       admin_status: admin.admin_status || "active",
     });
 
-    setModal({ open: true, type: "staffForm", mode: "edit", data: admin });
+    setModal({
+      open: true,
+      type: "staffForm",
+      mode: "edit",
+      data: admin,
+    });
   };
 
   const openResetStaffPassword = (admin) => {
@@ -406,7 +438,74 @@ export default function UsersPanel() {
 
   const closeModal = () => {
     if (actionLoading) return;
-    setModal({ open: false, type: "", mode: "create", data: null });
+
+    setModal({
+      open: false,
+      type: "",
+      mode: "create",
+      data: null,
+    });
+  };
+
+  const submitCreateAccountForm = async (event) => {
+    event.preventDefault();
+    setActionLoading(true);
+
+    try {
+      if (createRole === "user") {
+        const payload = {
+          ...userForm,
+          isVerified: Boolean(userForm.isVerified),
+        };
+
+        if (!payload.password) {
+          throw new Error("Password is required to create a user.");
+        }
+
+        const result = await requestJson(USERS_ENDPOINT, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        showToast("success", result.message || "User created successfully.");
+        closeModal();
+        setActiveSection("users");
+        loadUsers({ reset: true });
+        return;
+      }
+
+      if (!isSuperAdmin) {
+        throw new Error("Only superadmin can create moderator or superadmin accounts.");
+      }
+
+      const payload = {
+        ...staffForm,
+        role: createRole,
+        isVerified: Boolean(staffForm.isVerified),
+        permissions:
+          createRole === "superadmin"
+            ? ADMIN_PERMISSIONS.map((item) => item.value)
+            : staffForm.permissions,
+      };
+
+      if (!payload.password) {
+        throw new Error("Password is required to create staff.");
+      }
+
+      const result = await requestJson(STAFF_ENDPOINT, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      showToast("success", result.message || "Staff created successfully.");
+      closeModal();
+      setActiveSection("staff");
+      loadStaff({ reset: true });
+    } catch (err) {
+      showToast("error", err.message || "Could not create account.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const submitUserForm = async (event) => {
@@ -414,7 +513,6 @@ export default function UsersPanel() {
     setActionLoading(true);
 
     try {
-      const isCreate = modal.mode === "create";
       const id = getId(modal.data);
 
       const payload = {
@@ -422,21 +520,15 @@ export default function UsersPanel() {
         isVerified: Boolean(userForm.isVerified),
       };
 
-      if (!isCreate) {
-        delete payload.email_address;
-        delete payload.password;
-      }
+      delete payload.email_address;
+      delete payload.password;
 
-      if (isCreate && !payload.password) {
-        throw new Error("Password is required to create a user.");
-      }
-
-      const result = await requestJson(isCreate ? USERS_ENDPOINT : `${USERS_ENDPOINT}/${id}`, {
-        method: isCreate ? "POST" : "PATCH",
+      const result = await requestJson(`${USERS_ENDPOINT}/${id}`, {
+        method: "PATCH",
         body: JSON.stringify(payload),
       });
 
-      showToast("success", result.message || "User saved successfully.");
+      showToast("success", result.message || "User updated successfully.");
       closeModal();
       loadUsers({ reset: true });
     } catch (err) {
@@ -451,29 +543,26 @@ export default function UsersPanel() {
     setActionLoading(true);
 
     try {
-      const isCreate = modal.mode === "create";
       const id = getId(modal.data);
 
       const payload = {
         ...staffForm,
         isVerified: Boolean(staffForm.isVerified),
+        permissions:
+          staffForm.role === "superadmin"
+            ? ADMIN_PERMISSIONS.map((item) => item.value)
+            : staffForm.permissions,
       };
 
-      if (!isCreate) {
-        delete payload.email_address;
-        delete payload.password;
-      }
+      delete payload.email_address;
+      delete payload.password;
 
-      if (isCreate && !payload.password) {
-        throw new Error("Password is required to create staff.");
-      }
-
-      const result = await requestJson(isCreate ? STAFF_ENDPOINT : `${STAFF_ENDPOINT}/${id}`, {
-        method: isCreate ? "POST" : "PATCH",
+      const result = await requestJson(`${STAFF_ENDPOINT}/${id}`, {
+        method: "PATCH",
         body: JSON.stringify(payload),
       });
 
-      showToast("success", result.message || "Staff saved successfully.");
+      showToast("success", result.message || "Staff updated successfully.");
       closeModal();
       loadStaff({ reset: true });
     } catch (err) {
@@ -512,16 +601,13 @@ export default function UsersPanel() {
     setActionLoading(true);
 
     try {
-      const result = await requestJson(
-        `${USERS_ENDPOINT}/${getId(modal.data)}/verify`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            isVerified: false,
-            rejection_reason: rejectReason || "Profile rejected by admin.",
-          }),
-        }
-      );
+      const result = await requestJson(`${USERS_ENDPOINT}/${getId(modal.data)}/verify`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          isVerified: false,
+          rejection_reason: rejectReason || "Profile rejected by admin.",
+        }),
+      });
 
       showToast("success", result.message || "User rejected successfully.");
       closeModal();
@@ -563,7 +649,9 @@ export default function UsersPanel() {
     try {
       const result = await requestJson(
         `${USERS_ENDPOINT}/${getId(user)}?hard=${hard ? "true" : "false"}`,
-        { method: "DELETE" }
+        {
+          method: "DELETE",
+        }
       );
 
       showToast("success", result.message || "User deleted.");
@@ -620,13 +708,10 @@ export default function UsersPanel() {
         throw new Error("New password must be at least 6 characters.");
       }
 
-      const result = await requestJson(
-        `${STAFF_ENDPOINT}/${getId(modal.data)}/password`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ password: resetPasswordValue }),
-        }
-      );
+      const result = await requestJson(`${STAFF_ENDPOINT}/${getId(modal.data)}/password`, {
+        method: "PATCH",
+        body: JSON.stringify({ password: resetPasswordValue }),
+      });
 
       showToast("success", result.message || "Password reset successfully.");
       closeModal();
@@ -647,6 +732,7 @@ export default function UsersPanel() {
 
   const totalStaff = staff.length;
   const activeStaff = staff.filter((item) => item.admin_status === "active").length;
+  const superAdmins = staff.filter((item) => item.role === "superadmin").length;
 
   return (
     <div className="relative">
@@ -657,8 +743,9 @@ export default function UsersPanel() {
           <h2 className="text-xl font-bold text-slate-950">
             Users & Admin Access
           </h2>
+
           <p className="mt-1 text-sm text-slate-500">
-            Manage normal users, profile verification, account status, and admin staff.
+            Manage users, moderators, and superadmin accounts from one panel.
           </p>
         </div>
 
@@ -709,8 +796,8 @@ export default function UsersPanel() {
             search={userFilters.search}
             onSearch={(value) => updateUserFilter("search", value)}
             onRefresh={() => loadUsers({ reset: true })}
-            onCreate={openCreateUser}
-            createLabel="Create User"
+            onCreate={() => openCreateAccount("user")}
+            createLabel="Create Account"
             loading={loading}
           >
             <Select
@@ -785,15 +872,15 @@ export default function UsersPanel() {
           <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <MiniStat icon={UserCog} label="Loaded Staff" value={totalStaff} />
             <MiniStat icon={ShieldCheck} label="Active Staff" value={activeStaff} />
-            <MiniStat icon={Crown} label="Super Admins" value={staff.filter((s) => s.role === "superadmin").length} />
+            <MiniStat icon={Crown} label="Super Admins" value={superAdmins} />
           </div>
 
           <PanelToolbar
             search={staffFilters.search}
             onSearch={(value) => updateStaffFilter("search", value)}
             onRefresh={() => loadStaff({ reset: true })}
-            onCreate={openCreateStaff}
-            createLabel="Create Staff"
+            onCreate={() => openCreateAccount("moderator")}
+            createLabel="Create Account"
             loading={loading}
           >
             <Select
@@ -849,6 +936,21 @@ export default function UsersPanel() {
       )}
 
       <Modal open={modal.open} onClose={closeModal}>
+        {modal.type === "accountForm" ? (
+          <CreateAccountForm
+            role={createRole}
+            setRole={setCreateRole}
+            userForm={userForm}
+            setUserForm={setUserForm}
+            staffForm={staffForm}
+            setStaffForm={setStaffForm}
+            isSuperAdmin={isSuperAdmin}
+            loading={actionLoading}
+            onSubmit={submitCreateAccountForm}
+            onClose={closeModal}
+          />
+        ) : null}
+
         {modal.type === "userForm" ? (
           <UserForm
             mode={modal.mode}
@@ -901,6 +1003,499 @@ export default function UsersPanel() {
   );
 }
 
+function CreateAccountForm({
+  role,
+  setRole,
+  userForm,
+  setUserForm,
+  staffForm,
+  setStaffForm,
+  isSuperAdmin,
+  loading,
+  onSubmit,
+  onClose,
+}) {
+  const isUserRole = role === "user";
+  const isModeratorRole = role === "moderator";
+  const isSuperAdminRole = role === "superadmin";
+
+  const updateUser = (key, value) => {
+    setUserForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updateStaff = (key, value) => {
+    setStaffForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const changeRole = (value) => {
+    if (value !== "user" && !isSuperAdmin) return;
+
+    setRole(value);
+
+    if (value === "moderator") {
+      setStaffForm((prev) => ({
+        ...prev,
+        role: "moderator",
+        permissions:
+          Array.isArray(prev.permissions) && prev.permissions.length
+            ? prev.permissions
+            : DEFAULT_MODERATOR_PERMISSIONS,
+      }));
+    }
+
+    if (value === "superadmin") {
+      setStaffForm((prev) => ({
+        ...prev,
+        role: "superadmin",
+        permissions: ADMIN_PERMISSIONS.map((item) => item.value),
+      }));
+    }
+  };
+
+  const togglePermission = (permission) => {
+    setStaffForm((prev) => {
+      const exists = prev.permissions.includes(permission);
+
+      return {
+        ...prev,
+        permissions: exists
+          ? prev.permissions.filter((item) => item !== permission)
+          : [...prev.permissions, permission],
+      };
+    });
+  };
+
+  return (
+    <form onSubmit={onSubmit}>
+      <ModalHeader
+        title="Create Account"
+        text="Select a role first. The input fields will change automatically."
+        onClose={onClose}
+      />
+
+      <div className="mb-5 rounded-3xl border border-slate-100 bg-slate-50/70 p-4">
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-bold text-slate-700">
+            Account Role <span className="text-rose-600">*</span>
+          </span>
+
+          <select
+            value={role}
+            onChange={(event) => changeRole(event.target.value)}
+            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+          >
+            <option value="user">Normal User</option>
+            <option value="moderator" disabled={!isSuperAdmin}>
+              Moderator
+            </option>
+            <option value="superadmin" disabled={!isSuperAdmin}>
+              Super Admin
+            </option>
+          </select>
+        </label>
+
+        {!isSuperAdmin ? (
+          <p className="mt-2 text-xs font-semibold text-amber-700">
+            Only superadmin can create moderator or superadmin accounts.
+          </p>
+        ) : null}
+      </div>
+
+      {isUserRole ? (
+        <>
+          <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
+            Normal user will be created under Users and will receive the default free membership.
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Input label="First Name" value={userForm.first_name} onChange={(v) => updateUser("first_name", v)} required />
+            <Input label="Last Name" value={userForm.last_name} onChange={(v) => updateUser("last_name", v)} required />
+            <Input label="Email" type="email" value={userForm.email_address} onChange={(v) => updateUser("email_address", v)} required />
+            <Input label="Phone" value={userForm.phone_number} onChange={(v) => updateUser("phone_number", v)} required />
+            <Input label="Password" type="password" value={userForm.password} onChange={(v) => updateUser("password", v)} required />
+            <Input label="Date of Birth" type="date" value={userForm.dob} onChange={(v) => updateUser("dob", v)} />
+
+            <SelectInput
+              label="Gender"
+              value={userForm.gender}
+              onChange={(v) => updateUser("gender", v)}
+              options={[
+                ["", "Select"],
+                ["male", "Male"],
+                ["female", "Female"],
+                ["other", "Other"],
+              ]}
+            />
+
+            <SelectInput
+              label="Religion"
+              value={userForm.religion}
+              onChange={(v) => updateUser("religion", v)}
+              options={[
+                ["", "Select"],
+                ["Islam", "Islam"],
+                ["Hinduism", "Hinduism"],
+                ["Buddhism", "Buddhism"],
+                ["Christianity", "Christianity"],
+                ["Other", "Other"],
+              ]}
+            />
+
+            <SelectInput
+              label="Marital Status"
+              value={userForm.marital_status}
+              onChange={(v) => updateUser("marital_status", v)}
+              options={[
+                ["", "Select"],
+                ["never_married", "Never Married"],
+                ["divorced", "Divorced"],
+                ["widowed", "Widowed"],
+                ["separated", "Separated"],
+              ]}
+            />
+
+            <Input label="Division" value={userForm.current_division} onChange={(v) => updateUser("current_division", v)} />
+            <Input label="District" value={userForm.current_district} onChange={(v) => updateUser("current_district", v)} />
+            <Input label="City" value={userForm.current_city} onChange={(v) => updateUser("current_city", v)} />
+            <Input label="Profession" value={userForm.profession} onChange={(v) => updateUser("profession", v)} />
+            <Input label="Highest Education" value={userForm.highest_education} onChange={(v) => updateUser("highest_education", v)} />
+
+            <SelectInput
+              label="Profile Status"
+              value={userForm.profile_status}
+              onChange={(v) => updateUser("profile_status", v)}
+              options={[
+                ["incomplete", "Incomplete"],
+                ["pending_review", "Pending Review"],
+                ["approved", "Approved"],
+                ["rejected", "Rejected"],
+                ["hidden", "Hidden"],
+              ]}
+            />
+
+            <SelectInput
+              label="Account Status"
+              value={userForm.account_status}
+              onChange={(v) => updateUser("account_status", v)}
+              options={[
+                ["active", "Active"],
+                ["inactive", "Inactive"],
+                ["suspended", "Suspended"],
+                ["deleted", "Deleted"],
+              ]}
+            />
+          </div>
+
+          <label className="mt-4 flex items-center gap-2 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700">
+            <input
+              type="checkbox"
+              checked={userForm.isVerified}
+              onChange={(event) => updateUser("isVerified", event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+            />
+            Mark user as verified
+          </label>
+        </>
+      ) : null}
+
+      {!isUserRole ? (
+        <>
+          <div className="mb-4 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
+            {isSuperAdminRole
+              ? "Superadmin will automatically receive all permissions."
+              : "Moderator will receive only selected permissions."}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Input label="First Name" value={staffForm.first_name} onChange={(v) => updateStaff("first_name", v)} />
+            <Input label="Last Name" value={staffForm.last_name} onChange={(v) => updateStaff("last_name", v)} />
+            <Input label="Username" value={staffForm.username} onChange={(v) => updateStaff("username", v)} />
+            <Input label="Email" type="email" value={staffForm.email_address} onChange={(v) => updateStaff("email_address", v)} required />
+            <Input label="Phone" value={staffForm.phone_number} onChange={(v) => updateStaff("phone_number", v)} />
+            <Input label="Password" type="password" value={staffForm.password} onChange={(v) => updateStaff("password", v)} required />
+
+            <SelectInput
+              label="Admin Status"
+              value={staffForm.admin_status}
+              onChange={(v) => updateStaff("admin_status", v)}
+              options={[
+                ["active", "Active"],
+                ["inactive", "Inactive"],
+                ["suspended", "Suspended"],
+              ]}
+            />
+          </div>
+
+          <label className="mt-4 flex items-center gap-2 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700">
+            <input
+              type="checkbox"
+              checked={staffForm.isVerified}
+              onChange={(event) => updateStaff("isVerified", event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+            />
+            Mark staff as verified
+          </label>
+
+          {isModeratorRole ? (
+            <div className="mt-4 rounded-3xl border border-slate-100 bg-slate-50/70 p-4">
+              <p className="mb-3 text-sm font-bold text-slate-900">
+                Moderator Permissions
+              </p>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {ADMIN_PERMISSIONS.map((permission) => (
+                  <label
+                    key={permission.value}
+                    className="flex cursor-pointer items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-600"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={staffForm.permissions.includes(permission.value)}
+                      onChange={() => togglePermission(permission.value)}
+                      className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                    />
+                    {permission.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      <ModalFooter
+        loading={loading}
+        onClose={onClose}
+        submitLabel={
+          isUserRole
+            ? "Create User"
+            : isSuperAdminRole
+            ? "Create Super Admin"
+            : "Create Moderator"
+        }
+      />
+    </form>
+  );
+}
+
+function UserForm({ mode, form, setForm, loading, onSubmit, onClose }) {
+  const update = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  return (
+    <form onSubmit={onSubmit}>
+      <ModalHeader
+        title="Update User"
+        text="Update profile, status and verification fields."
+        onClose={onClose}
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Input label="First Name" value={form.first_name} onChange={(v) => update("first_name", v)} required />
+        <Input label="Last Name" value={form.last_name} onChange={(v) => update("last_name", v)} required />
+        <Input label="Email" type="email" value={form.email_address} onChange={(v) => update("email_address", v)} disabled required />
+        <Input label="Phone" value={form.phone_number} onChange={(v) => update("phone_number", v)} required />
+        <Input label="Date of Birth" type="date" value={form.dob} onChange={(v) => update("dob", v)} />
+
+        <SelectInput
+          label="Gender"
+          value={form.gender}
+          onChange={(v) => update("gender", v)}
+          options={[
+            ["", "Select"],
+            ["male", "Male"],
+            ["female", "Female"],
+            ["other", "Other"],
+          ]}
+        />
+
+        <SelectInput
+          label="Religion"
+          value={form.religion}
+          onChange={(v) => update("religion", v)}
+          options={[
+            ["", "Select"],
+            ["Islam", "Islam"],
+            ["Hinduism", "Hinduism"],
+            ["Buddhism", "Buddhism"],
+            ["Christianity", "Christianity"],
+            ["Other", "Other"],
+          ]}
+        />
+
+        <SelectInput
+          label="Marital Status"
+          value={form.marital_status}
+          onChange={(v) => update("marital_status", v)}
+          options={[
+            ["", "Select"],
+            ["never_married", "Never Married"],
+            ["divorced", "Divorced"],
+            ["widowed", "Widowed"],
+            ["separated", "Separated"],
+          ]}
+        />
+
+        <Input label="Division" value={form.current_division} onChange={(v) => update("current_division", v)} />
+        <Input label="District" value={form.current_district} onChange={(v) => update("current_district", v)} />
+        <Input label="City" value={form.current_city} onChange={(v) => update("current_city", v)} />
+        <Input label="Profession" value={form.profession} onChange={(v) => update("profession", v)} />
+        <Input label="Highest Education" value={form.highest_education} onChange={(v) => update("highest_education", v)} />
+
+        <SelectInput
+          label="Profile Status"
+          value={form.profile_status}
+          onChange={(v) => update("profile_status", v)}
+          options={[
+            ["incomplete", "Incomplete"],
+            ["pending_review", "Pending Review"],
+            ["approved", "Approved"],
+            ["rejected", "Rejected"],
+            ["hidden", "Hidden"],
+          ]}
+        />
+
+        <SelectInput
+          label="Account Status"
+          value={form.account_status}
+          onChange={(v) => update("account_status", v)}
+          options={[
+            ["active", "Active"],
+            ["inactive", "Inactive"],
+            ["suspended", "Suspended"],
+            ["deleted", "Deleted"],
+          ]}
+        />
+      </div>
+
+      <label className="mt-4 flex items-center gap-2 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700">
+        <input
+          type="checkbox"
+          checked={form.isVerified}
+          onChange={(event) => update("isVerified", event.target.checked)}
+          className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+        />
+        Mark as verified
+      </label>
+
+      <ModalFooter loading={loading} onClose={onClose} submitLabel="Update User" />
+    </form>
+  );
+}
+
+function StaffForm({ mode, form, setForm, loading, onSubmit, onClose }) {
+  const update = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updateRole = (role) => {
+    setForm((prev) => ({
+      ...prev,
+      role,
+      permissions:
+        role === "superadmin"
+          ? ADMIN_PERMISSIONS.map((item) => item.value)
+          : prev.permissions?.length
+          ? prev.permissions
+          : DEFAULT_MODERATOR_PERMISSIONS,
+    }));
+  };
+
+  const togglePermission = (permission) => {
+    setForm((prev) => {
+      const exists = prev.permissions.includes(permission);
+
+      return {
+        ...prev,
+        permissions: exists
+          ? prev.permissions.filter((item) => item !== permission)
+          : [...prev.permissions, permission],
+      };
+    });
+  };
+
+  return (
+    <form onSubmit={onSubmit}>
+      <ModalHeader
+        title="Update Staff Admin"
+        text="Only superadmin can manage moderator and superadmin staff accounts."
+        onClose={onClose}
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Input label="First Name" value={form.first_name} onChange={(v) => update("first_name", v)} />
+        <Input label="Last Name" value={form.last_name} onChange={(v) => update("last_name", v)} />
+        <Input label="Username" value={form.username} onChange={(v) => update("username", v)} />
+        <Input label="Email" type="email" value={form.email_address} onChange={(v) => update("email_address", v)} disabled required />
+        <Input label="Phone" value={form.phone_number} onChange={(v) => update("phone_number", v)} />
+
+        <SelectInput
+          label="Role"
+          value={form.role}
+          onChange={updateRole}
+          options={[
+            ["moderator", "Moderator"],
+            ["superadmin", "Super Admin"],
+          ]}
+        />
+
+        <SelectInput
+          label="Admin Status"
+          value={form.admin_status}
+          onChange={(v) => update("admin_status", v)}
+          options={[
+            ["active", "Active"],
+            ["inactive", "Inactive"],
+            ["suspended", "Suspended"],
+          ]}
+        />
+      </div>
+
+      <label className="mt-4 flex items-center gap-2 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700">
+        <input
+          type="checkbox"
+          checked={form.isVerified}
+          onChange={(event) => update("isVerified", event.target.checked)}
+          className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+        />
+        Mark staff as verified
+      </label>
+
+      {form.role !== "superadmin" ? (
+        <div className="mt-4 rounded-3xl border border-slate-100 bg-slate-50/70 p-4">
+          <p className="mb-3 text-sm font-bold text-slate-900">
+            Moderator Permissions
+          </p>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {ADMIN_PERMISSIONS.map((permission) => (
+              <label
+                key={permission.value}
+                className="flex cursor-pointer items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-600"
+              >
+                <input
+                  type="checkbox"
+                  checked={form.permissions.includes(permission.value)}
+                  onChange={() => togglePermission(permission.value)}
+                  className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                />
+                {permission.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
+          Superadmin automatically receives all permissions.
+        </div>
+      )}
+
+      <ModalFooter loading={loading} onClose={onClose} submitLabel="Update Staff" />
+    </form>
+  );
+}
+
 function PanelToolbar({
   search,
   onSearch,
@@ -915,6 +1510,7 @@ function PanelToolbar({
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_auto_auto]">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
           <input
             value={search}
             onChange={(event) => onSearch(event.target.value)}
@@ -1009,6 +1605,7 @@ function UsersTable({
                         user?.membership?.name ||
                         "Free Plan"}
                     </p>
+
                     <p className="text-xs text-slate-400">
                       {user?.membership_status?.status ||
                         user?.membership_status ||
@@ -1192,192 +1789,14 @@ function StaffTable({
   );
 }
 
-function UserForm({ mode, form, setForm, loading, onSubmit, onClose }) {
-  const isCreate = mode === "create";
-
-  const update = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  return (
-    <form onSubmit={onSubmit}>
-      <ModalHeader
-        title={isCreate ? "Create User" : "Update User"}
-        text={
-          isCreate
-            ? "Create a normal matrimony user from admin panel."
-            : "Update profile, status and verification fields."
-        }
-        onClose={onClose}
-      />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Input label="First Name" value={form.first_name} onChange={(v) => update("first_name", v)} required />
-        <Input label="Last Name" value={form.last_name} onChange={(v) => update("last_name", v)} required />
-        <Input label="Email" type="email" value={form.email_address} onChange={(v) => update("email_address", v)} disabled={!isCreate} required />
-        <Input label="Phone" value={form.phone_number} onChange={(v) => update("phone_number", v)} required />
-        {isCreate ? (
-          <Input label="Password" type="password" value={form.password} onChange={(v) => update("password", v)} required />
-        ) : null}
-        <Input label="Date of Birth" type="date" value={form.dob} onChange={(v) => update("dob", v)} />
-        <SelectInput label="Gender" value={form.gender} onChange={(v) => update("gender", v)} options={[["", "Select"], ["male", "Male"], ["female", "Female"], ["other", "Other"]]} />
-        <SelectInput label="Religion" value={form.religion} onChange={(v) => update("religion", v)} options={[["", "Select"], ["Islam", "Islam"], ["Hinduism", "Hinduism"], ["Buddhism", "Buddhism"], ["Christianity", "Christianity"], ["Other", "Other"]]} />
-        <SelectInput label="Marital Status" value={form.marital_status} onChange={(v) => update("marital_status", v)} options={[["", "Select"], ["never_married", "Never Married"], ["divorced", "Divorced"], ["widowed", "Widowed"], ["separated", "Separated"]]} />
-        <Input label="Division" value={form.current_division} onChange={(v) => update("current_division", v)} />
-        <Input label="District" value={form.current_district} onChange={(v) => update("current_district", v)} />
-        <Input label="City" value={form.current_city} onChange={(v) => update("current_city", v)} />
-        <Input label="Profession" value={form.profession} onChange={(v) => update("profession", v)} />
-        <Input label="Highest Education" value={form.highest_education} onChange={(v) => update("highest_education", v)} />
-
-        <SelectInput
-          label="Profile Status"
-          value={form.profile_status}
-          onChange={(v) => update("profile_status", v)}
-          options={[
-            ["incomplete", "Incomplete"],
-            ["pending_review", "Pending Review"],
-            ["approved", "Approved"],
-            ["rejected", "Rejected"],
-            ["hidden", "Hidden"],
-          ]}
-        />
-
-        <SelectInput
-          label="Account Status"
-          value={form.account_status}
-          onChange={(v) => update("account_status", v)}
-          options={[
-            ["active", "Active"],
-            ["inactive", "Inactive"],
-            ["suspended", "Suspended"],
-            ["deleted", "Deleted"],
-          ]}
-        />
-      </div>
-
-      <label className="mt-4 flex items-center gap-2 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700">
-        <input
-          type="checkbox"
-          checked={form.isVerified}
-          onChange={(event) => update("isVerified", event.target.checked)}
-          className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-        />
-        Mark as verified
-      </label>
-
-      <ModalFooter loading={loading} onClose={onClose} submitLabel={isCreate ? "Create User" : "Update User"} />
-    </form>
-  );
-}
-
-function StaffForm({ mode, form, setForm, loading, onSubmit, onClose }) {
-  const isCreate = mode === "create";
-
-  const update = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const togglePermission = (permission) => {
-    setForm((prev) => {
-      const exists = prev.permissions.includes(permission);
-
-      return {
-        ...prev,
-        permissions: exists
-          ? prev.permissions.filter((item) => item !== permission)
-          : [...prev.permissions, permission],
-      };
-    });
-  };
-
-  return (
-    <form onSubmit={onSubmit}>
-      <ModalHeader
-        title={isCreate ? "Create Staff Admin" : "Update Staff Admin"}
-        text="Only superadmin can manage moderator and superadmin staff accounts."
-        onClose={onClose}
-      />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Input label="First Name" value={form.first_name} onChange={(v) => update("first_name", v)} />
-        <Input label="Last Name" value={form.last_name} onChange={(v) => update("last_name", v)} />
-        <Input label="Username" value={form.username} onChange={(v) => update("username", v)} />
-        <Input label="Email" type="email" value={form.email_address} onChange={(v) => update("email_address", v)} disabled={!isCreate} required />
-        <Input label="Phone" value={form.phone_number} onChange={(v) => update("phone_number", v)} />
-        {isCreate ? (
-          <Input label="Password" type="password" value={form.password} onChange={(v) => update("password", v)} required />
-        ) : null}
-
-        <SelectInput
-          label="Role"
-          value={form.role}
-          onChange={(v) => update("role", v)}
-          options={[
-            ["moderator", "Moderator"],
-            ["superadmin", "Super Admin"],
-          ]}
-        />
-
-        <SelectInput
-          label="Admin Status"
-          value={form.admin_status}
-          onChange={(v) => update("admin_status", v)}
-          options={[
-            ["active", "Active"],
-            ["inactive", "Inactive"],
-            ["suspended", "Suspended"],
-          ]}
-        />
-      </div>
-
-      <label className="mt-4 flex items-center gap-2 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700">
-        <input
-          type="checkbox"
-          checked={form.isVerified}
-          onChange={(event) => update("isVerified", event.target.checked)}
-          className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-        />
-        Mark staff as verified
-      </label>
-
-      {form.role !== "superadmin" ? (
-        <div className="mt-4 rounded-3xl border border-slate-100 bg-slate-50/70 p-4">
-          <p className="mb-3 text-sm font-bold text-slate-900">
-            Moderator Permissions
-          </p>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {ADMIN_PERMISSIONS.map((permission) => (
-              <label
-                key={permission.value}
-                className="flex cursor-pointer items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-600"
-              >
-                <input
-                  type="checkbox"
-                  checked={form.permissions.includes(permission.value)}
-                  onChange={() => togglePermission(permission.value)}
-                  className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-                />
-                {permission.label}
-              </label>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
-          Superadmin automatically receives all permissions.
-        </div>
-      )}
-
-      <ModalFooter loading={loading} onClose={onClose} submitLabel={isCreate ? "Create Staff" : "Update Staff"} />
-    </form>
-  );
-}
-
 function ViewUser({ user, onClose }) {
   return (
     <div>
-      <ModalHeader title="User Details" text="Full profile summary from admin endpoint." onClose={onClose} />
+      <ModalHeader
+        title="User Details"
+        text="Full profile summary from admin endpoint."
+        onClose={onClose}
+      />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Detail label="Name" value={getFullName(user)} />
@@ -1387,19 +1806,28 @@ function ViewUser({ user, onClose }) {
         <Detail label="Age" value={user.age} />
         <Detail label="Religion" value={user.religion} />
         <Detail label="Marital Status" value={cleanStatus(user.marital_status)} />
-        <Detail label="Location" value={[user.current_city, user.current_district, user.current_division].filter(Boolean).join(", ")} />
+        <Detail
+          label="Location"
+          value={[user.current_city, user.current_district, user.current_division]
+            .filter(Boolean)
+            .join(", ")}
+        />
         <Detail label="Profession" value={user.profession} />
         <Detail label="Education" value={user.highest_education} />
         <Detail label="Profile Status" value={cleanStatus(user.profile_status)} />
         <Detail label="Account Status" value={cleanStatus(user.account_status)} />
         <Detail label="Completeness" value={`${user.profile_completeness || 0}%`} />
-        <Detail label="Membership" value={user?.membership_status?.name || user?.membership?.name || "Free Plan"} />
+        <Detail
+          label="Membership"
+          value={user?.membership_status?.name || user?.membership?.name || "Free Plan"}
+        />
       </div>
 
       <div className="mt-5 rounded-3xl bg-slate-50 p-4">
         <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
           About
         </p>
+
         <p className="mt-2 text-sm leading-6 text-slate-600">
           {user.about_me || "No about information added."}
         </p>
@@ -1431,6 +1859,7 @@ function RejectUserForm({ user, reason, setReason, loading, onSubmit, onClose })
         <span className="mb-1.5 block text-sm font-bold text-slate-700">
           Rejection Reason
         </span>
+
         <textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}
@@ -1440,7 +1869,12 @@ function RejectUserForm({ user, reason, setReason, loading, onSubmit, onClose })
         />
       </label>
 
-      <ModalFooter loading={loading} onClose={onClose} submitLabel="Reject Profile" danger />
+      <ModalFooter
+        loading={loading}
+        onClose={onClose}
+        submitLabel="Reject Profile"
+        danger
+      />
     </form>
   );
 }
@@ -1462,7 +1896,11 @@ function ResetPasswordForm({ admin, value, setValue, loading, onSubmit, onClose 
         required
       />
 
-      <ModalFooter loading={loading} onClose={onClose} submitLabel="Reset Password" />
+      <ModalFooter
+        loading={loading}
+        onClose={onClose}
+        submitLabel="Reset Password"
+      />
     </form>
   );
 }
@@ -1472,10 +1910,8 @@ function Modal({ open, onClose, children }) {
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/50 px-4 py-6 backdrop-blur-sm">
-      <div
-        className="absolute inset-0"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0" onClick={onClose} />
+
       <div className="relative z-10 max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] bg-white p-5 shadow-2xl sm:p-6">
         {children}
       </div>
@@ -1518,9 +1954,7 @@ function ModalFooter({ loading, onClose, submitLabel, danger = false }) {
         type="submit"
         disabled={loading}
         className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white transition disabled:opacity-60 ${
-          danger
-            ? "bg-rose-600 hover:bg-rose-700"
-            : "bg-slate-950 hover:bg-slate-800"
+          danger ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-950 hover:bg-slate-800"
         }`}
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -1606,12 +2040,14 @@ function ActionSelect({ options, onChange, placeholder, disabled }) {
       defaultValue=""
       onChange={(event) => {
         if (!event.target.value) return;
+
         onChange(event.target.value);
         event.target.value = "";
       }}
       className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-600 outline-none transition hover:bg-slate-50 disabled:opacity-50"
     >
       <option value="">{placeholder}</option>
+
       {options.map(([value, label]) => (
         <option key={value} value={value}>
           {label}
@@ -1650,6 +2086,7 @@ function UserCell({ user }) {
         <p className="truncate text-sm font-bold text-slate-900">
           {getFullName(user)}
         </p>
+
         <p className="truncate text-xs font-medium text-slate-400">
           Joined {formatDate(user.createdAt)}
         </p>
@@ -1663,12 +2100,16 @@ function ContactCell({ item }) {
     <div className="space-y-1">
       <div className="flex items-center gap-2 text-sm text-slate-600">
         <Mail className="h-3.5 w-3.5 text-slate-400" />
-        <span className="max-w-[220px] truncate">{item.email_address || "No email"}</span>
+        <span className="max-w-[220px] truncate">
+          {item.email_address || "No email"}
+        </span>
       </div>
 
       <div className="flex items-center gap-2 text-sm text-slate-600">
         <Phone className="h-3.5 w-3.5 text-slate-400" />
-        <span className="max-w-[220px] truncate">{item.phone_number || "No phone"}</span>
+        <span className="max-w-[220px] truncate">
+          {item.phone_number || "No phone"}
+        </span>
       </div>
     </div>
   );
@@ -1712,7 +2153,10 @@ function MiniStat({ icon: Icon, label, value }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             {label}
           </p>
-          <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
+
+          <p className="mt-1 text-2xl font-black text-slate-950">
+            {value}
+          </p>
         </div>
       </div>
     </div>
@@ -1726,11 +2170,15 @@ function ErrorBox({ error }) {
     <div className="mb-5 rounded-3xl border border-amber-100 bg-amber-50 p-4">
       <div className="flex gap-3">
         <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+
         <div>
           <h3 className="text-sm font-bold text-amber-900">
             Request Failed
           </h3>
-          <p className="mt-1 text-sm leading-6 text-amber-700">{error}</p>
+
+          <p className="mt-1 text-sm leading-6 text-amber-700">
+            {error}
+          </p>
         </div>
       </div>
     </div>
@@ -1743,7 +2191,10 @@ function TableLoading({ colSpan, text }) {
       <td colSpan={colSpan} className="px-4 py-14 text-center">
         <div className="mx-auto flex max-w-sm flex-col items-center">
           <Loader2 className="h-8 w-8 animate-spin text-rose-600" />
-          <p className="mt-3 text-sm font-semibold text-slate-600">{text}</p>
+
+          <p className="mt-3 text-sm font-semibold text-slate-600">
+            {text}
+          </p>
         </div>
       </td>
     </tr>
@@ -1758,7 +2209,11 @@ function TableEmpty({ colSpan, text }) {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">
             <Users className="h-7 w-7" />
           </div>
-          <h3 className="mt-4 text-base font-bold text-slate-900">{text}</h3>
+
+          <h3 className="mt-4 text-base font-bold text-slate-900">
+            {text}
+          </h3>
+
           <p className="mt-1 text-sm text-slate-500">
             Try refreshing or changing filters.
           </p>
@@ -1792,6 +2247,7 @@ function Detail({ label, value }) {
       <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
         {label}
       </p>
+
       <p className="mt-1 text-sm font-bold capitalize text-slate-800">
         {value || "N/A"}
       </p>
@@ -1816,6 +2272,7 @@ function Toast({ type, message }) {
         ) : (
           <XCircle className="h-5 w-5" />
         )}
+
         <p className="text-sm font-bold">{message}</p>
       </div>
     </div>

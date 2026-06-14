@@ -1,4 +1,6 @@
 import User from "../models/user.model.js";
+import Membership from "../models/membership.model.js";
+import MatrimonyAction from "../models/matrimonyAction.model.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import uploadCloudinary from "../utils/cloudinary.js";
@@ -20,13 +22,33 @@ const PUBLIC_CARD_PROJECTION = `
   current_district
   current_city
   profession
+  highest_education
+  profile_photos
+  profile_photo_visibility
+  privacy
   isVerified
   profile_status
+  account_status
   createdAt
 `;
 
 const FULL_SAFE_SELECT =
   "-password -nid -passport -present_address -permanent_address -family.father_name -family.mother_name";
+
+const PUBLIC_PROFILE_DETAIL_SELECT =
+  "-password -nid -passport -email_normalized -phone_normalized -full_name_normalized";
+
+const VIEWER_PROFILE_ACCESS_SELECT = `
+  role
+  permissions
+  account_status
+  admin_status
+  isVerified
+  membership
+  membership_started_at
+  membership_expiry
+  membership_status
+`;
 
 /* =====================================================
    JWT
@@ -52,9 +74,7 @@ const generateToken = (user) => {
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-const resolveUserId = (req) => {
-  return req.user?._id || req.user?.id;
-};
+const resolveUserId = (req) => req.user?._id || req.user?.id;
 
 const normalizeString = (value) => {
   if (value === undefined || value === null) return value;
@@ -71,8 +91,8 @@ const normalizePhone = (value) => {
 
 const parseBoolean = (value) => {
   if (typeof value === "boolean") return value;
-  if (value === "true") return true;
-  if (value === "false") return false;
+  if (value === "true" || value === "1" || value === 1) return true;
+  if (value === "false" || value === "0" || value === 0) return false;
   return Boolean(value);
 };
 
@@ -186,6 +206,24 @@ const uploadProfilePhotos = async (files = []) => {
   return uploadedPhotos;
 };
 
+const assignDefaultFreeMembership = async (user) => {
+  if (!user || user.membership) return user;
+
+  let freePlan = await Membership.findOne({ slug: "free", is_default: true });
+
+  if (!freePlan) {
+    freePlan = await Membership.ensureDefaultFreePlan();
+  }
+
+  user.membership = freePlan._id;
+  user.membership_started_at = new Date();
+  user.membership_expiry = null;
+  user.membership_status = "free";
+
+  await user.save();
+  return user;
+};
+
 /* =====================================================
    PROFILE COMPLETENESS
 ===================================================== */
@@ -248,28 +286,290 @@ const computeProfileCompleteness = (user) => {
 };
 
 /* =====================================================
-   RESPONSE BUILDERS
+   MEMBERSHIP / ACCESS HELPERS
 ===================================================== */
 
 const buildMembershipStatus = (user) => {
-  const m = user?.membership || null;
+  const membership = user?.membership || null;
   const expiry = user?.membership_expiry ? new Date(user.membership_expiry) : null;
   const now = new Date();
-  const active = Boolean(m && expiry && expiry > now);
+
+  const isFreePlan = Boolean(
+    membership?.slug === "free" || membership?.is_free || membership?.is_default
+  );
+
+  const isPaidActive = Boolean(
+    membership &&
+      !isFreePlan &&
+      user?.membership_status === "active" &&
+      expiry &&
+      expiry > now
+  );
+
+  const isFreeActive = Boolean(membership && isFreePlan);
+  const active = isFreeActive || isPaidActive;
+  const features = membership?.features || {};
 
   return {
-    type: m?.name || "free",
+    plan_id: membership?._id || null,
+    name: membership?.name || "Free Plan",
+    slug: membership?.slug || "free",
+    status: user?.membership_status || (isFreeActive ? "free" : "expired"),
     active,
+    is_free: isFreeActive,
+    is_paid: isPaidActive,
+    started_at: user?.membership_started_at || null,
     expiry: user?.membership_expiry || null,
-    can_chat: Boolean(active && m?.can_chat),
-    can_view_full_profiles: Boolean(active && m?.can_view_full_profiles),
-    message_limit_per_day: active ? m?.message_limit_per_day ?? 0 : 0,
     days_left:
-      active && expiry
+      isPaidActive && expiry
         ? Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
-        : 0,
+        : null,
+    features,
   };
 };
+
+const isAdminViewer = (viewer) => {
+  return Boolean(viewer && ADMIN_ROLES.includes(viewer.role));
+};
+
+const isOwnerViewer = (viewer, target) => {
+  return Boolean(
+    viewer &&
+      target &&
+      String(viewer._id || viewer.id) === String(target._id || target.id)
+  );
+};
+
+const viewerHasFeature = (viewer, featureKey) => {
+  if (!viewer) return false;
+  if (isAdminViewer(viewer)) return true;
+
+  const membershipStatus = buildMembershipStatus(viewer);
+  if (!membershipStatus.active) return false;
+
+  return Boolean(membershipStatus.features?.[featureKey]);
+};
+
+const getExistingAccessStatus = async (viewerId, targetUserId) => {
+  if (!viewerId || !targetUserId) {
+    return {
+      connected: false,
+      photo_access_approved: false,
+      guardian_contact_approved: false,
+      shortlisted: false,
+    };
+  }
+
+  const actions = await MatrimonyAction.find({
+    $or: [
+      {
+        type: "connection_request",
+        status: "accepted",
+        $or: [
+          { from_user: viewerId, to_user: targetUserId },
+          { from_user: targetUserId, to_user: viewerId },
+        ],
+      },
+      {
+        type: "photo_access_request",
+        from_user: viewerId,
+        to_user: targetUserId,
+        status: "accepted",
+      },
+      {
+        type: "guardian_contact_request",
+        from_user: viewerId,
+        to_user: targetUserId,
+        status: "accepted",
+      },
+      {
+        type: "shortlist",
+        from_user: viewerId,
+        to_user: targetUserId,
+        status: "active",
+      },
+    ],
+  })
+    .select("type status from_user to_user")
+    .lean();
+
+  return {
+    connected: actions.some((item) => item.type === "connection_request"),
+    photo_access_approved: actions.some(
+      (item) => item.type === "photo_access_request"
+    ),
+    guardian_contact_approved: actions.some(
+      (item) => item.type === "guardian_contact_request"
+    ),
+    shortlisted: actions.some((item) => item.type === "shortlist"),
+  };
+};
+
+const resolvePhotoVisibilityAllowed = ({
+  target,
+  membershipStatus,
+  accessStatus,
+  admin,
+  owner,
+}) => {
+  if (admin || owner) return true;
+  if (accessStatus?.photo_access_approved) return true;
+
+  const visibility = target?.profile_photo_visibility || "members_only";
+
+  if (visibility === "hidden") return false;
+  if (visibility === "private") return false;
+  if (visibility === "public") return Boolean(membershipStatus?.active);
+  if (visibility === "members_only") return Boolean(membershipStatus?.active);
+  if (visibility === "premium_only") return Boolean(membershipStatus?.is_paid);
+
+  return false;
+};
+
+const canShowPhotoOnBrowseCard = ({
+  viewer,
+  target,
+  acceptedPhotoAccess = false,
+}) => {
+  if (!target) return false;
+
+  const photos = Array.isArray(target.profile_photos)
+    ? target.profile_photos.filter(Boolean)
+    : [];
+
+  if (photos.length === 0) return false;
+
+  const admin = isAdminViewer(viewer);
+  const owner = isOwnerViewer(viewer, target);
+
+  if (admin || owner) return true;
+  if (acceptedPhotoAccess) return true;
+  if (!viewer) return false;
+
+  const membershipStatus = buildMembershipStatus(viewer);
+
+  if (!membershipStatus.active) return false;
+  if (!membershipStatus.features?.can_view_profile_photos) return false;
+
+  return resolvePhotoVisibilityAllowed({
+    target,
+    membershipStatus,
+    accessStatus: { photo_access_approved: acceptedPhotoAccess },
+    admin,
+    owner,
+  });
+};
+
+const buildProfileAccess = async (viewer, target) => {
+  const admin = isAdminViewer(viewer);
+  const owner = isOwnerViewer(viewer, target);
+  const membershipStatus = buildMembershipStatus(viewer);
+
+  const accessStatus =
+    admin || owner
+      ? {
+          connected: true,
+          photo_access_approved: true,
+          guardian_contact_approved: true,
+          shortlisted: false,
+        }
+      : await getExistingAccessStatus(viewer?._id, target?._id);
+
+  const canViewFullProfile =
+    admin || owner || viewerHasFeature(viewer, "can_view_full_profiles");
+
+  const canViewBiodata =
+    admin ||
+    owner ||
+    (canViewFullProfile && viewerHasFeature(viewer, "can_view_biodata"));
+
+  const photoVisibilityAllowed = resolvePhotoVisibilityAllowed({
+    target,
+    membershipStatus,
+    accessStatus,
+    admin,
+    owner,
+  });
+
+  const canViewProfilePhotos =
+    admin ||
+    owner ||
+    (canViewFullProfile &&
+      photoVisibilityAllowed &&
+      (viewerHasFeature(viewer, "can_view_profile_photos") ||
+        accessStatus.photo_access_approved));
+
+  const canViewPhone =
+    admin ||
+    owner ||
+    (canViewFullProfile &&
+      (viewerHasFeature(viewer, "can_view_phone") ||
+        accessStatus.guardian_contact_approved) &&
+      target?.privacy?.show_phone !== false);
+
+  const canViewEmail =
+    admin ||
+    owner ||
+    (canViewFullProfile &&
+      (viewerHasFeature(viewer, "can_view_email") ||
+        accessStatus.guardian_contact_approved) &&
+      target?.privacy?.show_email !== false);
+
+  const canViewAddress =
+    admin ||
+    owner ||
+    (canViewFullProfile &&
+      (viewerHasFeature(viewer, "can_view_address") ||
+        accessStatus.guardian_contact_approved) &&
+      target?.privacy?.show_address !== false);
+
+  return {
+    locked: !canViewFullProfile,
+    is_owner: owner,
+    is_admin: admin,
+
+    membership: {
+      active: membershipStatus.active,
+      is_free: membershipStatus.is_free,
+      is_paid: membershipStatus.is_paid,
+      name: membershipStatus.name,
+      status: membershipStatus.status,
+      expiry: membershipStatus.expiry,
+      days_left: membershipStatus.days_left,
+    },
+
+    access_status: accessStatus,
+
+    permissions: {
+      can_view_full_profile: canViewFullProfile,
+      can_view_biodata: canViewBiodata,
+      can_view_profile_photos: canViewProfilePhotos,
+      can_view_phone: canViewPhone,
+      can_view_email: canViewEmail,
+      can_view_address: canViewAddress,
+
+      can_send_connection_request: viewerHasFeature(
+        viewer,
+        "can_send_connection_request"
+      ),
+      can_send_messages: viewerHasFeature(viewer, "can_send_messages"),
+      can_request_photo_access:
+        viewerHasFeature(viewer, "can_request_photo_access") &&
+        !canViewProfilePhotos,
+      can_request_guardian_contact:
+        viewerHasFeature(viewer, "can_request_guardian_contact") &&
+        !canViewPhone,
+      can_shortlist_profiles: viewerHasFeature(
+        viewer,
+        "can_shortlist_profiles"
+      ),
+    },
+  };
+};
+
+/* =====================================================
+   RESPONSE BUILDERS
+===================================================== */
 
 const buildFullUser = (userDoc) => {
   const user = userDoc?.toObject ? userDoc.toObject({ virtuals: true }) : userDoc;
@@ -320,52 +620,160 @@ const buildLockedProfile = (user) => {
     marital_status: user?.marital_status || null,
     current_division: user?.current_division || null,
     current_district: user?.current_district || null,
+    current_city: user?.current_city || null,
     profession: user?.profession || null,
+    highest_education: user?.highest_education || null,
     isVerified: Boolean(user?.isVerified),
     profile_status: user?.profile_status,
 
-    // Public/locked users must never receive real image URLs.
     profile_photos: [],
+    profile_photo: null,
+    profile_photo_url: null,
     profile_photo_locked: true,
+    can_view_profile_photo: false,
     profile_locked: true,
     locked: true,
   };
 };
 
-const sanitizeFullProfileForViewer = (user, viewer) => {
+const buildBrowseProfileCard = ({
+  user,
+  viewer,
+  acceptedPhotoAccess = false,
+}) => {
+  const fullName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
+  const photos = Array.isArray(user?.profile_photos)
+    ? user.profile_photos.filter(Boolean)
+    : [];
+
+  const showPhoto = canShowPhotoOnBrowseCard({
+    viewer,
+    target: user,
+    acceptedPhotoAccess,
+  });
+
+  return {
+    _id: user?._id,
+    full_name: fullName || "User",
+    first_name: user?.first_name || null,
+    last_name: user?.last_name || null,
+    age: calculateAge(user?.dob),
+    gender: user?.gender || null,
+    religion: user?.religion || null,
+    marital_status: user?.marital_status || null,
+    current_division: user?.current_division || null,
+    current_district: user?.current_district || null,
+    current_city: user?.current_city || null,
+    profession: user?.profession || null,
+    highest_education: user?.highest_education || null,
+    isVerified: Boolean(user?.isVerified),
+    profile_status: user?.profile_status,
+
+    profile_photos: showPhoto ? photos : [],
+    profile_photo: showPhoto ? photos[0] || null : null,
+    profile_photo_url: showPhoto ? photos[0] || null : null,
+    profile_photo_locked: !showPhoto,
+    can_view_profile_photo: showPhoto,
+
+    profile_locked: true,
+    locked: true,
+  };
+};
+
+const sanitizeProfileForViewer = (user, access) => {
   const safeUser = buildFullUser(user);
 
-  const isAdminViewer = viewer && ADMIN_ROLES.includes(viewer.role);
-  const isOwner = viewer && String(viewer._id || viewer.id) === String(user?._id);
-  const membershipStatus = buildMembershipStatus(viewer);
+  delete safeUser.password;
+  delete safeUser.nid;
+  delete safeUser.passport;
+  delete safeUser.email_normalized;
+  delete safeUser.phone_normalized;
+  delete safeUser.full_name_normalized;
 
-  const canSeePhotos =
-    isAdminViewer ||
-    isOwner ||
-    (membershipStatus.active &&
-      membershipStatus.can_view_full_profiles &&
-      ["members_only", "premium_only", "public"].includes(
-        user?.profile_photo_visibility || "members_only"
-      ));
+  delete safeUser.membership;
+  delete safeUser.membership_started_at;
+  delete safeUser.membership_expiry;
+  delete safeUser.membership_status;
 
-  if (!canSeePhotos) {
+  delete safeUser.role;
+  delete safeUser.permissions;
+  delete safeUser.admin_status;
+  delete safeUser.verification;
+
+  if (!access.permissions.can_view_profile_photos) {
     safeUser.profile_photos = [];
     safeUser.profile_photo_locked = true;
   } else {
     safeUser.profile_photo_locked = false;
   }
 
+  if (!access.permissions.can_view_phone) {
+    delete safeUser.phone_number;
+    safeUser.phone_locked = true;
+  } else {
+    safeUser.phone_locked = false;
+  }
+
+  if (!access.permissions.can_view_email) {
+    delete safeUser.email_address;
+    safeUser.email_locked = true;
+  } else {
+    safeUser.email_locked = false;
+  }
+
+  if (!access.permissions.can_view_address) {
+    delete safeUser.present_address;
+    delete safeUser.permanent_address;
+    delete safeUser.permanent_division;
+    delete safeUser.permanent_district;
+    delete safeUser.permanent_upazila;
+    safeUser.address_locked = true;
+  } else {
+    safeUser.address_locked = false;
+  }
+
+  if (!access.permissions.can_view_biodata) {
+    delete safeUser.about_me;
+    delete safeUser.family;
+    delete safeUser.lifestyle;
+    delete safeUser.children;
+    delete safeUser.disability;
+    delete safeUser.education_details;
+    delete safeUser.partner_preferences;
+
+    delete safeUser.sect;
+    delete safeUser.caste_or_community;
+    delete safeUser.mother_tongue;
+    delete safeUser.nationality;
+
+    delete safeUser.height;
+    delete safeUser.height_cm;
+    delete safeUser.weight;
+    delete safeUser.weight_kg;
+    delete safeUser.body_type;
+    delete safeUser.complexion;
+    delete safeUser.blood_group;
+
+    delete safeUser.annual_income;
+    delete safeUser.monthly_income;
+    delete safeUser.monthly_income_min;
+    delete safeUser.monthly_income_max;
+    delete safeUser.company_or_business_name;
+    delete safeUser.designation;
+    delete safeUser.occupation_type;
+
+    delete safeUser.preferred_location;
+    delete safeUser.willing_to_relocate;
+
+    safeUser.biodata_locked = true;
+  } else {
+    safeUser.biodata_locked = false;
+  }
+
+  safeUser.profile_locked = false;
+  safeUser.locked = false;
+
   return safeUser;
-};
-
-const viewerCanSeeFull = (viewer) => {
-  if (!viewer) return false;
-
-  if (ADMIN_ROLES.includes(viewer.role)) return true;
-
-  const membershipStatus = buildMembershipStatus(viewer);
-
-  return Boolean(membershipStatus.active && membershipStatus.can_view_full_profiles);
 };
 
 /* =====================================================
@@ -440,7 +848,9 @@ const blockedUserUpdateFields = [
   "verifiedBy",
   "verification",
   "membership",
+  "membership_started_at",
   "membership_expiry",
+  "membership_status",
   "account_status",
   "profile_status",
   "profile_completeness",
@@ -455,6 +865,12 @@ const blockedUserUpdateFields = [
 
 const buildProfileUpdatePayload = (body) => {
   const $set = {};
+
+  for (const blockedField of blockedUserUpdateFields) {
+    if (Object.prototype.hasOwnProperty.call(body, blockedField)) {
+      delete body[blockedField];
+    }
+  }
 
   for (const field of allowedFlatFields) {
     if (Object.prototype.hasOwnProperty.call(body, field)) {
@@ -475,6 +891,10 @@ const buildProfileUpdatePayload = (body) => {
 
       if (field === "willing_to_relocate") {
         value = parseBoolean(value);
+      }
+
+      if (field === "phone_number") {
+        value = normalizePhone(value);
       }
 
       $set[field] = typeof value === "string" ? normalizeString(value) : value;
@@ -531,65 +951,13 @@ const buildProfileUpdatePayload = (body) => {
     }
   }
 
-  for (const [key, value] of Object.entries(body)) {
-    if (blockedUserUpdateFields.includes(key)) continue;
-
-    const isNestedAllowed = allowedNestedObjects.some((obj) =>
-      key.startsWith(`${obj}.`)
-    );
-
-    if (!isNestedAllowed) continue;
-
-    let finalValue = value;
-
-    if (typeof value === "string") finalValue = normalizeString(value);
-
-    if (
-      key.includes("age_range") ||
-      key.includes("number_of") ||
-      key.includes("married") ||
-      key.includes("passing_year") ||
-      key.includes("_cm")
-    ) {
-      finalValue = parseNumber(value);
-    }
-
-    if (
-      key.includes("has_children") ||
-      key.includes("has_disability") ||
-      key.includes("show_") ||
-      key.includes("allow_") ||
-      key.includes("accept_")
-    ) {
-      finalValue = parseBoolean(value);
-    }
-
-    $set[key] = finalValue;
-  }
-
-  const arrayFields = [
-    "lifestyle.hobbies",
-    "partner_preferences.preferred_marital_status",
-    "partner_preferences.preferred_education",
-    "partner_preferences.preferred_profession",
-    "partner_preferences.preferred_division",
-    "partner_preferences.preferred_district",
-    "partner_preferences.preferred_country",
-    "partner_preferences.preferred_family_status",
-  ];
-
-  for (const field of arrayFields) {
-    if (Object.prototype.hasOwnProperty.call(body, field)) {
-      $set[field] = normalizeArray(body[field]);
-    }
-  }
+  $set.last_active_at = new Date();
 
   return $set;
 };
 
 /* =====================================================
-   REGISTER NORMAL USER
-   POST /api/user/register
+   AUTH: REGISTER USER
 ===================================================== */
 
 export const registerUser = async (req, res) => {
@@ -598,23 +966,32 @@ export const registerUser = async (req, res) => {
       first_name,
       last_name,
       email_address,
+      email,
       phone_number,
       password,
       dob,
       gender,
-      religion,
-      marital_status,
+      nid,
+      passport,
+      current_city,
       current_division,
       current_district,
-      current_city,
+      preferred_location,
       profession,
       highest_education,
+      annual_income,
+      religion,
+      marital_status,
+      height,
+      mother_tongue,
+      about_me,
     } = req.body;
 
-    if (!first_name || !last_name || !email_address || !phone_number || !password) {
+    const loginEmail = email_address || email;
+
+    if (!first_name || !last_name || !loginEmail || !password) {
       return res.status(400).json({
-        message:
-          "First name, last name, email address, phone number and password are required",
+        message: "First name, last name, email and password are required",
       });
     }
 
@@ -624,49 +1001,60 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    const normalizedEmail = normalizeEmail(email_address);
+    const normalizedEmail = normalizeEmail(loginEmail);
 
-    const existingUser = await User.exists({ email_address: normalizedEmail });
+    const existingUser = await User.exists({
+      email_address: normalizedEmail,
+    });
 
     if (existingUser) {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    const profilePhotos = await uploadProfilePhotos(req.files);
+    const uploadedPhotos = await uploadProfilePhotos(req.files || []);
 
     const user = new User({
       role: "user",
       first_name: normalizeString(first_name),
       last_name: normalizeString(last_name),
       email_address: normalizedEmail,
-      phone_number: normalizePhone(phone_number),
+      phone_number: phone_number ? normalizePhone(phone_number) : undefined,
       password,
       dob,
       gender,
-      religion,
-      marital_status,
-      current_division,
-      current_district,
-      current_city,
-      profession,
-      highest_education,
-      profile_photos: profilePhotos,
-      profile_status: "incomplete",
-      account_status: "active",
-      isVerified: false,
-      verification: {
-        verification_status: "pending",
+      nid,
+      passport,
+      current_city: normalizeString(current_city),
+      current_division: normalizeString(current_division),
+      current_district: normalizeString(current_district),
+      preferred_location: normalizeString(preferred_location),
+      profession: normalizeString(profession),
+      highest_education: normalizeString(highest_education),
+      annual_income: normalizeString(annual_income),
+      religion: normalizeString(religion),
+      marital_status: normalizeString(marital_status),
+      height: normalizeString(height),
+      mother_tongue: normalizeString(mother_tongue),
+      about_me: normalizeString(about_me),
+      profile_photos: uploadedPhotos,
+      profile_photo_visibility: "members_only",
+      privacy: {
+        allow_profile_view: true,
+        allow_messages: true,
+        show_phone: false,
+        show_email: false,
+        show_address: false,
+        show_income: false,
+        show_family_details: false,
       },
+      account_status: "active",
+      profile_status: "pending_review",
+      last_login: new Date(),
       last_active_at: new Date(),
     });
 
-    user.profile_completeness = computeProfileCompleteness(user);
-
-    if (user.profile_completeness >= 70) {
-      user.profile_status = "pending_review";
-    }
-
     await user.save();
+    await assignDefaultFreeMembership(user);
 
     const savedUser = await User.findById(user._id)
       .select(FULL_SAFE_SELECT)
@@ -687,49 +1075,28 @@ export const registerUser = async (req, res) => {
 };
 
 /* =====================================================
-   LOGIN USER / MODERATOR / SUPERADMIN
-   POST /api/user/login
+   AUTH: LOGIN USER / ADMIN
 ===================================================== */
 
 export const loginUser = async (req, res) => {
   try {
-    const { email_address, email, password } = req.body;
+    const { email_address, email, phone_number, password } = req.body;
     const loginEmail = email_address || email;
 
-    if (!loginEmail || !password) {
+    if ((!loginEmail && !phone_number) || !password) {
       return res.status(400).json({
-        message: "Email and password are required",
+        message: "Email or phone and password are required",
       });
     }
 
-    const normalizedEmail = normalizeEmail(loginEmail);
+    const query = loginEmail
+      ? { email_address: normalizeEmail(loginEmail) }
+      : { phone_number: normalizePhone(phone_number) };
 
-    const user = await User.findOne({ email_address: normalizedEmail })
-      .select("+password")
-      .populate("membership");
+    const user = await User.findOne(query).select("+password");
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (["suspended", "deleted"].includes(user.account_status)) {
-      return res.status(403).json({
-        message: "This account is not available",
-      });
-    }
-
-    if (ADMIN_ROLES.includes(user.role)) {
-      if (user.admin_status !== "active") {
-        return res.status(403).json({
-          message: "Admin account is not active",
-        });
-      }
-
-      if (!user.isVerified) {
-        return res.status(403).json({
-          message: "Admin account is not verified yet",
-        });
-      }
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const isMatch = await user.matchPassword(password);
@@ -738,17 +1105,21 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    await User.updateOne(
-      { _id: user._id },
-      {
-        $set: {
-          last_login: new Date(),
-          last_active_at: new Date(),
-        },
-      }
-    );
+    if (user.account_status && user.account_status !== "active") {
+      return res.status(403).json({
+        message: "Your account is not active",
+      });
+    }
 
-    const safeUser = await User.findById(user._id)
+    if (user.role === "user") {
+      await assignDefaultFreeMembership(user);
+    }
+
+    user.last_login = new Date();
+    user.last_active_at = new Date();
+    await user.save();
+
+    const savedUser = await User.findById(user._id)
       .select(FULL_SAFE_SELECT)
       .populate("membership")
       .lean({ virtuals: true });
@@ -756,9 +1127,9 @@ export const loginUser = async (req, res) => {
     res.status(200).json({
       message: "Login successful",
       token: generateToken(user),
-      user: ADMIN_ROLES.includes(user.role)
-        ? buildAdminUser(safeUser)
-        : buildFullUser(safeUser),
+      user: ADMIN_ROLES.includes(savedUser.role)
+        ? buildAdminUser(savedUser)
+        : buildFullUser(savedUser),
     });
   } catch (error) {
     res.status(500).json({
@@ -769,8 +1140,7 @@ export const loginUser = async (req, res) => {
 };
 
 /* =====================================================
-   GET MY PROFILE
-   GET /api/user/me
+   GET ME
 ===================================================== */
 
 export const getMe = async (req, res) => {
@@ -802,8 +1172,7 @@ export const getMe = async (req, res) => {
 };
 
 /* =====================================================
-   UPDATE MY NORMAL USER PROFILE
-   PATCH /api/user/me
+   UPDATE ME
 ===================================================== */
 
 export const updateMe = async (req, res) => {
@@ -814,82 +1183,27 @@ export const updateMe = async (req, res) => {
       return res.status(400).json({ message: "Valid user id is required" });
     }
 
-    const currentUser = await User.findById(uid)
-      .select("role profile_status profile_photos")
-      .lean();
+    const $set = buildProfileUpdatePayload({ ...req.body });
+    const uploadedPhotos = await uploadProfilePhotos(req.files || []);
 
-    if (!currentUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (ADMIN_ROLES.includes(currentUser.role)) {
-      return res.status(403).json({
-        message: "Admin/moderator profile update should be handled from admin panel",
-      });
-    }
-
-    const $set = buildProfileUpdatePayload(req.body);
-    const uploadedPhotos = await uploadProfilePhotos(req.files);
-
-    const updateQuery = {};
-
-    if (Object.keys($set).length > 0) updateQuery.$set = $set;
+    const update = {
+      $set,
+    };
 
     if (uploadedPhotos.length > 0) {
-      updateQuery.$push = {
+      update.$push = {
         profile_photos: {
           $each: uploadedPhotos,
         },
       };
     }
 
-    if (Object.prototype.hasOwnProperty.call(req.body, "profile_photos")) {
-      const photos = normalizeArray(req.body.profile_photos);
-
-      updateQuery.$set = {
-        ...(updateQuery.$set || {}),
-        profile_photos: photos,
-      };
-
-      delete updateQuery.$push?.profile_photos;
-
-      if (updateQuery.$push && Object.keys(updateQuery.$push).length === 0) {
-        delete updateQuery.$push;
-      }
-    }
-
-    if (Object.keys(updateQuery).length === 0) {
-      return res.status(400).json({
-        message: "No valid profile fields provided for update",
-      });
-    }
-
-    let updatedUser = await User.findByIdAndUpdate(uid, updateQuery, {
-      new: true,
-      runValidators: true,
-    })
-      .select(FULL_SAFE_SELECT)
-      .populate("membership");
-
-    const profileCompleteness = computeProfileCompleteness(updatedUser);
-
-    const statusSet = {
-      profile_completeness: profileCompleteness,
-      last_active_at: new Date(),
-    };
-
-    if (
-      updatedUser.profile_status === "incomplete" &&
-      profileCompleteness >= 70
-    ) {
-      statusSet.profile_status = "pending_review";
-    }
-
-    updatedUser = await User.findByIdAndUpdate(
-      uid,
+    const updatedUser = await User.findOneAndUpdate(
       {
-        $set: statusSet,
+        _id: uid,
+        role: "user",
       },
+      update,
       {
         new: true,
         runValidators: true,
@@ -898,6 +1212,10 @@ export const updateMe = async (req, res) => {
       .select(FULL_SAFE_SELECT)
       .populate("membership")
       .lean({ virtuals: true });
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     res.status(200).json({
       message: "Profile updated successfully",
@@ -913,7 +1231,6 @@ export const updateMe = async (req, res) => {
 
 /* =====================================================
    CHANGE PASSWORD
-   PATCH /api/user/change-password
 ===================================================== */
 
 export const changePassword = async (req, res) => {
@@ -966,8 +1283,8 @@ export const changePassword = async (req, res) => {
 };
 
 /* =====================================================
-   BROWSE USERS - CURSOR BASED
-   GET /api/user/browse?limit=20&cursor=
+   BROWSE USERS
+   GET /api/user/browse
 ===================================================== */
 
 export const browseUsers = async (req, res) => {
@@ -1025,26 +1342,83 @@ export const browseUsers = async (req, res) => {
     }
 
     if (search) {
-      query.$text = {
-        $search: String(search).trim(),
-      };
+      const keyword = String(search).trim();
+
+      if (keyword) {
+        query.$or = [
+          { first_name: { $regex: keyword, $options: "i" } },
+          { last_name: { $regex: keyword, $options: "i" } },
+          { current_city: { $regex: keyword, $options: "i" } },
+          { current_district: { $regex: keyword, $options: "i" } },
+          { current_division: { $regex: keyword, $options: "i" } },
+          { profession: { $regex: keyword, $options: "i" } },
+          { highest_education: { $regex: keyword, $options: "i" } },
+        ];
+      }
     }
 
-    const rows = await User.find(query)
-      .select(PUBLIC_CARD_PROJECTION)
-      .sort({ _id: -1 })
-      .limit(perPage + 1)
-      .lean({ virtuals: true });
+    const viewerId = resolveUserId(req);
+
+    const [rows, viewer] = await Promise.all([
+      User.find(query)
+        .select(PUBLIC_CARD_PROJECTION)
+        .sort({ _id: -1 })
+        .limit(perPage + 1)
+        .lean({ virtuals: true }),
+
+      viewerId && isValidObjectId(viewerId)
+        ? User.findById(viewerId)
+            .select(VIEWER_PROFILE_ACCESS_SELECT)
+            .populate("membership")
+            .lean({ virtuals: true })
+        : null,
+    ]);
 
     const hasNextPage = rows.length > perPage;
     const itemsRaw = hasNextPage ? rows.slice(0, perPage) : rows;
+    const targetIds = itemsRaw.map((item) => item._id).filter(Boolean);
+
+    let acceptedPhotoAccessSet = new Set();
+
+    if (viewerId && targetIds.length > 0) {
+      const acceptedPhotoRequests = await MatrimonyAction.find({
+        type: "photo_access_request",
+        from_user: viewerId,
+        to_user: { $in: targetIds },
+        status: "accepted",
+      })
+        .select("to_user")
+        .lean();
+
+      acceptedPhotoAccessSet = new Set(
+        acceptedPhotoRequests.map((item) => String(item.to_user))
+      );
+    }
+
+    const items = itemsRaw.map((user) =>
+      buildBrowseProfileCard({
+        user,
+        viewer,
+        acceptedPhotoAccess: acceptedPhotoAccessSet.has(String(user._id)),
+      })
+    );
+
+    const membershipStatus = viewer ? buildMembershipStatus(viewer) : null;
 
     res.status(200).json({
       limit: perPage,
-      count: itemsRaw.length,
+      count: items.length,
       hasNextPage,
       nextCursor: hasNextPage ? getNextCursor(itemsRaw) : null,
-      items: itemsRaw.map((user) => buildLockedProfile(user)),
+      viewer_access: {
+        logged_in: Boolean(viewer),
+        membership_active: Boolean(membershipStatus?.active),
+        can_view_profile_photos: Boolean(
+          membershipStatus?.active &&
+            membershipStatus?.features?.can_view_profile_photos
+        ),
+      },
+      items,
     });
   } catch (error) {
     res.status(500).json({
@@ -1055,60 +1429,91 @@ export const browseUsers = async (req, res) => {
 };
 
 /* =====================================================
-   GET PUBLIC USER PROFILE
+   GET USER PROFILE DETAILS
    GET /api/user/:id/profile
 ===================================================== */
 
 export const getUserPublicProfile = async (req, res) => {
   try {
     const { id } = req.params;
+    const viewerId = resolveUserId(req);
 
     if (!id || !isValidObjectId(id)) {
       return res.status(400).json({ message: "Valid profile id is required" });
     }
 
-    const viewerId = req.user?.id || req.user?._id || null;
+    if (!viewerId || !isValidObjectId(viewerId)) {
+      return res.status(401).json({
+        locked: true,
+        code: "LOGIN_REQUIRED",
+        message: "Please login to view profile details",
+      });
+    }
 
     const [target, viewer] = await Promise.all([
       User.findOne({
         _id: id,
         role: "user",
         account_status: "active",
+        profile_status: { $in: ["approved", "pending_review"] },
+        "privacy.allow_profile_view": { $ne: false },
       })
-        .select(FULL_SAFE_SELECT)
+        .select(PUBLIC_PROFILE_DETAIL_SELECT)
         .populate("membership")
         .lean({ virtuals: true }),
 
-      viewerId && isValidObjectId(viewerId)
-        ? User.findById(viewerId)
-            .select("role membership membership_expiry")
-            .populate("membership")
-            .lean()
-        : null,
+      User.findById(viewerId)
+        .select(VIEWER_PROFILE_ACCESS_SELECT)
+        .populate("membership")
+        .lean({ virtuals: true }),
     ]);
+
+    if (!viewer) {
+      return res.status(404).json({
+        locked: true,
+        code: "VIEWER_NOT_FOUND",
+        message: "Logged in user not found",
+      });
+    }
+
+    if (viewer.account_status !== "active") {
+      return res.status(403).json({
+        locked: true,
+        code: "ACCOUNT_NOT_ACTIVE",
+        message: "Your account is not active",
+      });
+    }
 
     if (!target) {
       return res.status(404).json({ message: "User profile not found" });
     }
 
-    User.updateOne(
-      { _id: id },
-      {
-        $inc: { profile_views_count: 1 },
-      }
-    ).catch(() => {});
+    const access = await buildProfileAccess(viewer, target);
 
-    if (viewerCanSeeFull(viewer)) {
-      return res.status(200).json({
-        locked: false,
-        user: sanitizeFullProfileForViewer(target, viewer),
+    if (!access.permissions.can_view_full_profile) {
+      return res.status(403).json({
+        locked: true,
+        code: "MEMBERSHIP_REQUIRED",
+        message: "Active membership plan is required to view full profile",
+        user: buildLockedProfile(target),
+        access,
       });
     }
 
+    if (!access.is_owner) {
+      User.updateOne(
+        { _id: id },
+        {
+          $inc: { profile_views_count: 1 },
+          $set: { last_profile_viewed_at: new Date() },
+        }
+      ).catch(() => {});
+    }
+
     return res.status(200).json({
-      locked: true,
-      user: buildLockedProfile(target),
-      message: "Upgrade membership to view full profile",
+      locked: false,
+      user: sanitizeProfileForViewer(target, access),
+      access,
     });
   } catch (error) {
     res.status(500).json({
@@ -1120,7 +1525,6 @@ export const getUserPublicProfile = async (req, res) => {
 
 /* =====================================================
    REMOVE PROFILE PHOTO
-   PATCH /api/user/remove-photo
 ===================================================== */
 
 export const removeProfilePhoto = async (req, res) => {
@@ -1175,7 +1579,6 @@ export const removeProfilePhoto = async (req, res) => {
 
 /* =====================================================
    PROFILE VISIBILITY
-   PATCH /api/user/profile-visibility
 ===================================================== */
 
 export const updateProfileVisibility = async (req, res) => {
@@ -1221,6 +1624,111 @@ export const updateProfileVisibility = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error updating profile visibility",
+      error: error.message,
+    });
+  }
+};
+
+/* =====================================================
+   PUBLIC SUPERADMIN REGISTER - TEMPORARY
+===================================================== */
+
+export const registerSuperAdminPublic = async (req, res) => {
+  try {
+    const {
+      first_name = "Super",
+      last_name = "Admin",
+      username,
+      email_address,
+      email,
+      phone_number,
+      password,
+      permissions = [],
+    } = req.body;
+
+    const loginEmail = email_address || email;
+
+    if (!loginEmail || !password) {
+      return res.status(400).json({
+        message: "Email address and password are required",
+      });
+    }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({
+        message: "Password must be at least 6 characters long",
+      });
+    }
+
+    const normalizedEmail = normalizeEmail(loginEmail);
+    const normalizedUsername = username
+      ? String(username).toLowerCase().trim()
+      : undefined;
+
+    const existingEmail = await User.exists({
+      email_address: normalizedEmail,
+    });
+
+    if (existingEmail) {
+      return res.status(400).json({
+        message: "Email already registered",
+      });
+    }
+
+    if (normalizedUsername) {
+      const existingUsername = await User.exists({
+        username: normalizedUsername,
+      });
+
+      if (existingUsername) {
+        return res.status(400).json({
+          message: "Username already taken",
+        });
+      }
+    }
+
+    const superAdmin = new User({
+      role: "superadmin",
+      first_name: normalizeString(first_name),
+      last_name: normalizeString(last_name),
+      username: normalizedUsername,
+      email_address: normalizedEmail,
+      phone_number: phone_number ? normalizePhone(phone_number) : undefined,
+      password,
+      permissions: Array.isArray(permissions)
+        ? permissions
+        : normalizeArray(permissions),
+      admin_status: "active",
+      account_status: "active",
+      isVerified: true,
+      verifiedAt: new Date(),
+      verification: {
+        email_verified: true,
+        phone_verified: Boolean(phone_number),
+        nid_verified: false,
+        photo_verified: false,
+        biodata_verified: true,
+        verification_status: "approved",
+      },
+      profile_status: "approved",
+      last_login: new Date(),
+      last_active_at: new Date(),
+    });
+
+    await superAdmin.save();
+
+    const savedSuperAdmin = await User.findById(superAdmin._id)
+      .select(FULL_SAFE_SELECT)
+      .lean({ virtuals: true });
+
+    res.status(201).json({
+      message: "Super admin registered successfully",
+      token: generateToken(superAdmin),
+      user: buildAdminUser(savedSuperAdmin),
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error registering super admin",
       error: error.message,
     });
   }
